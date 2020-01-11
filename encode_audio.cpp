@@ -130,15 +130,18 @@ void encode (AVCodecContext* context, AVFrame* frame, AVPacket* pkt, FILE* f) {
 
 int main (int argc, char **argv) {
 
-  auto f = fopen ("nnn.mp3", "wb");
+  //auto f = fopen ("nnn.mp3", "wb");
+  auto f = fopen ("nnn.aac", "wb");
 
   avcodec_register_all();
-  auto codec = avcodec_find_encoder (AV_CODEC_ID_MP3);
+  auto codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
+  //auto codec = avcodec_find_encoder (AV_CODEC_ID_MP3);
   auto context = avcodec_alloc_context3 (codec);
 
   // put sample parameters */
-  context->bit_rate = 128000;
-  context->sample_fmt = AV_SAMPLE_FMT_S16P;
+  context->bit_rate = 64000;
+  //context->sample_fmt = AV_SAMPLE_FMT_S16P;
+  context->sample_fmt = AV_SAMPLE_FMT_FLTP;
   if (!check_sample_fmt (codec, context->sample_fmt)) {
     //{{{  error
     fprintf(stderr, "Encoder does not support sample format %s", av_get_sample_fmt_name(context->sample_fmt));
@@ -163,11 +166,15 @@ int main (int argc, char **argv) {
   auto tincr = 2.f * M_PI * 440.0f / context->sample_rate;
   for (auto i = 0; i < 200; i++) {
     av_frame_make_writable (frame);
-    auto samples0 = (int16_t*)frame->data[0];
-    auto samples1 = (int16_t*)frame->data[1];
+    //auto samples0 = (int16_t*)frame->data[0];
+    //auto samples1 = (int16_t*)frame->data[1];
+    auto samples0 = (float*)frame->data[0];
+    auto samples1 = (float*)frame->data[1];
     for (auto j = 0; j < context->frame_size; j++) {
-      samples0[j] = int16_t(sin(t) * 10000);
-      samples1[j] = int16_t(sin(t) * 10000);
+      //samples0[j] = int16_t(sin(t) * 10000);
+      //samples1[j] = int16_t(sin(t) * 10000);
+      samples0[j] = float(sin(t));
+      samples1[j] = float(sin(t));
       t += tincr;
       }
     encode (context, frame, pkt, f);

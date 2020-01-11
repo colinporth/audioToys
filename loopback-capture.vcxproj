@@ -98,6 +98,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>avrt.lib;ole32.lib;winmm.lib;avutil.lib;avcodec.lib;avformat.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../d2dWin/lib64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
