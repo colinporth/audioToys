@@ -15,7 +15,7 @@
 #define LOG(format, ...) wprintf (format L"\n", __VA_ARGS__)
 #define ERR(format, ...) LOG (L"Error: " format, __VA_ARGS__)
 //}}}
-#define DEFAULT_FILE L"loopback-capture.wav"
+#define DEFAULT_FILE L"loopback.wav"
 
 //{{{
 class AudioClientStopOnExit {
@@ -160,7 +160,7 @@ private:
 //{{{
 class CPrefs {
 public:
-  CPrefs() : m_pMMDevice(NULL), m_hFile(NULL), m_bInt16(false), m_pwfx(NULL), m_szFilename(NULL) {
+  CPrefs() : m_pMMDevice(NULL), m_hFile(NULL), m_bInt16(true), m_pwfx(NULL), m_szFilename(NULL) {
 
     list_devices();
     get_default_device (&m_pMMDevice);
@@ -439,40 +439,37 @@ HRESULT FinishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
 HRESULT LoopbackCapture (IMMDevice* pMMDevice, HMMIO hFile,
                          bool bInt16, HANDLE hStartedEvent, HANDLE hStopEvent, PUINT32 pnFrames) {
 
-  // activate an IAudioClient
+  //{{{  activate an IAudioClient
   IAudioClient* pAudioClient;
   HRESULT hr = pMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
   if (FAILED(hr)) {
-    //{{{
     ERR (L"IMMDevice::Activate (IAudioClient) failed: hr = 0x%08x", hr);
     return hr;
     }
-    //}}}
-  ReleaseOnExit releaseAudioClient (pAudioClient);
 
-  // get the default device periodicity
+  ReleaseOnExit releaseAudioClient (pAudioClient);
+  //}}}
+  //{{{  get the default device periodicity
   REFERENCE_TIME hnsDefaultDevicePeriod;
   hr = pAudioClient->GetDevicePeriod (&hnsDefaultDevicePeriod, NULL);
   if (FAILED (hr)) {
-    //{{{
     ERR (L"IAudioClient::GetDevicePeriod failed: hr = 0x%08x", hr);
     return hr;
     }
-    //}}}
-
-  // get the default device format
+  //}}}
+  //{{{  get the default device format
   WAVEFORMATEX* pwfx;
   hr = pAudioClient->GetMixFormat (&pwfx);
   if (FAILED (hr)) {
-    //{{{
     ERR (L"IAudioClient::GetMixFormat failed: hr = 0x%08x", hr);
     return hr;
     }
-    //}}}
+
   CoTaskMemFreeOnExit freeMixFormat (pwfx);
+  //}}}
 
   if (bInt16) {
-    // coerce int-16 wave format, can do this in-place not changing size of format, engine auto-convert float to int
+    //{{{  coerce int-16 wave format, can do this in-place not changing size of format, engine auto-convert float to int
     switch (pwfx->wFormatTag) {
       case WAVE_FORMAT_IEEE_FLOAT:
         pwfx->wFormatTag = WAVE_FORMAT_PCM;
@@ -506,99 +503,91 @@ HRESULT LoopbackCapture (IMMDevice* pMMDevice, HMMIO hFile,
         //}}}
       }
     }
+    //}}}
 
   MMCKINFO ckRIFF = {0};
   MMCKINFO ckData = {0};
   hr = WriteWaveHeader (hFile, pwfx, &ckRIFF, &ckData);
-  if (FAILED(hr)) {
-    //{{{
-    // WriteWaveHeader does its own logging
+  if (FAILED(hr))
     return hr;
-    }
-    //}}}
 
-  // create a periodic waitable timer
+  //{{{  create a periodic waitable timer
   HANDLE hWakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
   if (NULL == hWakeUp) {
-    //{{{  error
     DWORD dwErr = GetLastError();
     ERR (L"CreateWaitableTimer failed: last error = %u", dwErr);
     return HRESULT_FROM_WIN32(dwErr);
     }
-    //}}}
+
   CloseHandleOnExit closeWakeUp (hWakeUp);
+  //}}}
 
   UINT32 nBlockAlign = pwfx->nBlockAlign;
   *pnFrames = 0;
-
-  // call IAudioClient::Initialize
+  //{{{  call IAudioClient::Initialize
   // note that AUDCLNT_STREAMFLAGS_LOOPBACK and AUDCLNT_STREAMFLAGS_EVENTCALLBACK do not work together...
   // the "data ready" event never gets set so we're going to do a timer-driven loop
   hr = pAudioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, pwfx, 0);
   if (FAILED(hr)) {
-    //{{{
     ERR(L"IAudioClient::Initialize failed: hr = 0x%08x", hr);
     return hr;
     }
-    //}}}
-
-  // activate an IAudioCaptureClient
+  //}}}
+  //{{{  activate an IAudioCaptureClient
   IAudioCaptureClient* pAudioCaptureClient;
   hr = pAudioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&pAudioCaptureClient);
   if (FAILED(hr)) {
-    //{{{
     ERR (L"IAudioClient::GetService(IAudioCaptureClient) failed: hr = 0x%08x", hr);
     return hr;
     }
-    //}}}
-  ReleaseOnExit releaseAudioCaptureClient (pAudioCaptureClient);
 
-  // register with MMCSS
+  ReleaseOnExit releaseAudioCaptureClient (pAudioCaptureClient);
+  //}}}
+  //{{{  register with MMCSS
   DWORD nTaskIndex = 0;
   HANDLE hTask = AvSetMmThreadCharacteristics (L"Audio", &nTaskIndex);
   if (NULL == hTask) {
-    //{{{  error
+    // error
     DWORD dwErr = GetLastError();
-    ERR(L"AvSetMmThreadCharacteristics failed: last error = %u", dwErr);
-    return HRESULT_FROM_WIN32(dwErr);
+    ERR (L"AvSetMmThreadCharacteristics failed: last error = %u", dwErr);
+    return HRESULT_FROM_WIN32 (dwErr);
     }
-    //}}}
-  AvRevertMmThreadCharacteristicsOnExit unregisterMmcss (hTask);
 
-  // set the waitable timer
+  AvRevertMmThreadCharacteristicsOnExit unregisterMmcss (hTask);
+  //}}}
+  //{{{  set the waitable timer
   LARGE_INTEGER liFirstFire;
   liFirstFire.QuadPart = -hnsDefaultDevicePeriod / 2; // negative means relative time
   LONG lTimeBetweenFires = (LONG)hnsDefaultDevicePeriod / 2 / (10 * 1000); // convert to milliseconds
+
   BOOL bOK = SetWaitableTimer (hWakeUp, &liFirstFire, lTimeBetweenFires, NULL, NULL, FALSE);
   if (!bOK) {
-    //{{{
     DWORD dwErr = GetLastError();
     ERR (L"SetWaitableTimer failed: last error = %u", dwErr);
     return HRESULT_FROM_WIN32(dwErr);
     }
-    //}}}
-  CancelWaitableTimerOnExit cancelWakeUp (hWakeUp);
 
-  // call IAudioClient::Start
+  CancelWaitableTimerOnExit cancelWakeUp (hWakeUp);
+  //}}}
+  //{{{  call IAudioClient::Start
   hr = pAudioClient->Start();
   if (FAILED(hr)) {
-    //{{{
     ERR (L"IAudioClient::Start failed: hr = 0x%08x", hr);
     return hr;
     }
-    //}}}
+
   AudioClientStopOnExit stopAudioClient (pAudioClient);
+  //}}}
 
   SetEvent (hStartedEvent);
 
   // loopback capture loop
   HANDLE waitArray[2] = { hStopEvent, hWakeUp };
   DWORD dwWaitResult;
-
   bool bDone = false;
   bool bFirstPacket = true;
   for (UINT32 nPasses = 0; !bDone; nPasses++) {
-    // drain data while it is available
+    //{{{  drain data while it is available
     UINT32 nNextPacketSize;
     for (hr = pAudioCaptureClient->GetNextPacketSize (&nNextPacketSize); SUCCEEDED(hr) && nNextPacketSize > 0;
          hr = pAudioCaptureClient->GetNextPacketSize (&nNextPacketSize)) {
@@ -632,6 +621,8 @@ HRESULT LoopbackCapture (IMMDevice* pMMDevice, HMMIO hFile,
         return E_UNEXPECTED;
         }
         //}}}
+
+      // printf ("numFrames %d %d %d\n", nNumFramesToRead, nNumFramesToRead, nBlockAlign);
 
       LONG lBytesToWrite = nNumFramesToRead * nBlockAlign;
       LONG lBytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(pData), lBytesToWrite);
@@ -675,13 +666,11 @@ HRESULT LoopbackCapture (IMMDevice* pMMDevice, HMMIO hFile,
       }
       //}}}
     }
+    //}}}
 
   hr = FinishWaveFile (hFile, &ckData, &ckRIFF);
-  if (FAILED(hr)) {
-    //{{{  FinishWaveFile does it's own logging
+  if (FAILED(hr))
     return hr;
-    }
-    //}}}
 
   return hr;
   }
