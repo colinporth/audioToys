@@ -7,6 +7,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="encode_audio.cpp" />
+    <ClCompile Include="aacAdts.cpp" />
   </ItemGroup>
 </Project>

@@ -41,10 +41,33 @@
 
 extern "C" {
   #include <libavcodec/avcodec.h>
+  #include <libavformat/avformat.h>
   #include <libavutil/channel_layout.h>
   #include <libavutil/common.h>
   #include <libavutil/frame.h>
   #include <libavutil/samplefmt.h>
+  }
+//}}}
+
+//{{{
+int write_adts_muxed_data (void* opaque, uint8_t* adts_data, int size) {
+
+  FILE* encoded_audio_file = (FILE*)opaque;
+  fwrite (adts_data, 1, size, encoded_audio_file);
+  return size;
+  }
+//}}}
+//{{{
+int mux_aac_packet_to_adts (AVPacket* pkt, AVFormatContext* adts_container_ctx) {
+
+  int ret_val;
+  if ((ret_val = av_write_frame (adts_container_ctx, pkt)) < 0) {
+    av_log(NULL, AV_LOG_ERROR, "Error calling av_write_frame()%d')\n", ret_val);
+    }
+  else {
+    av_log(NULL, AV_LOG_INFO, "Encoded AAC packet %d, size=%d", pkt, pkt->size);
+    }
+  return ret_val;
   }
 //}}}
 
@@ -96,7 +119,7 @@ int select_channel_layout (const AVCodec* codec) {
   const uint64_t* p = codec->channel_layouts;
   while (*p) {
     int nb_channels = av_get_channel_layout_nb_channels (*p);
-    printf ("channel layouts %d %d\n", *p, nb_channels);
+    printf ("channel layouts %lld %d\n", *p, nb_channels);
     if (nb_channels > best_nb_channels) {
       best_ch_layout = *p;
       best_nb_channels = nb_channels;
@@ -108,7 +131,7 @@ int select_channel_layout (const AVCodec* codec) {
   }
 //}}}
 //{{{
-void encode (AVCodecContext* context, AVFrame* frame, AVPacket* pkt, FILE* f) {
+void encode (AVCodecContext* context, AVFrame* frame, AVPacket* pkt, FILE* f, AVFormatContext* adts_container_ctx) {
 
   if (avcodec_send_frame (context, frame) >= 0) {
     int ret = 0;
@@ -121,7 +144,11 @@ void encode (AVCodecContext* context, AVFrame* frame, AVPacket* pkt, FILE* f) {
         exit(1);
         }
 
-      fwrite (pkt->data, 1, pkt->size, f);
+      if ((mux_aac_packet_to_adts (pkt, adts_container_ctx)) < 0) {
+        fprintf (stderr, "Error mux_aac_packet_to_adts\n");
+        exit(1);
+        }
+      //fwrite (pkt->data, 1, pkt->size, f);
       av_packet_unref (pkt);
       }
     }
@@ -133,7 +160,7 @@ int main (int argc, char **argv) {
   //auto f = fopen ("nnn.mp3", "wb");
   auto f = fopen ("nnn.aac", "wb");
 
-  avcodec_register_all();
+  av_register_all();
   auto codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
   //auto codec = avcodec_find_encoder (AV_CODEC_ID_MP3);
   auto context = avcodec_alloc_context3 (codec);
@@ -162,6 +189,36 @@ int main (int argc, char **argv) {
   frame->channel_layout = context->channel_layout;
   av_frame_get_buffer (frame, 0);
 
+  //  Create the ADTS container for the encoded frames
+  AVOutputFormat* adts_container = av_guess_format ("adts", NULL, NULL);
+  if (!adts_container) {
+    //{{{
+    av_log (NULL, AV_LOG_ERROR, "Could not find adts output format\n");
+    exit (1);
+    }
+    //}}}
+
+  AVFormatContext* adts_container_ctx = NULL;
+  if ((avformat_alloc_output_context2 (&adts_container_ctx, adts_container, "", NULL)) < 0) {
+    //{{{
+    av_log (NULL, AV_LOG_ERROR, "Could not create output context\n");
+    exit(1);
+    }
+    //}}}
+
+  uint8_t* adts_container_buffer = NULL;
+  size_t adts_container_buffer_size = 4096;
+  adts_container_buffer = (uint8_t*)av_malloc (adts_container_buffer_size);
+
+  // Create an I/O context for the adts container with a write callback (write_adts_muxed_data()), so that muxed data will be accessed through this function and can be managed by the user.
+  AVIOContext* adts_avio_ctx = avio_alloc_context (adts_container_buffer, adts_container_buffer_size,
+                                                   1, f, NULL, &write_adts_muxed_data, NULL);
+
+  // Link the container's context to the previous I/O context
+  adts_container_ctx->pb = adts_avio_ctx;
+  AVStream* adts_stream = adts_stream = avformat_new_stream (adts_container_ctx, NULL);
+  adts_stream->id = adts_container_ctx->nb_streams-1;
+
   auto t = 0.f;
   auto tincr = 2.f * M_PI * 440.0f / context->sample_rate;
   for (auto i = 0; i < 200; i++) {
@@ -177,9 +234,9 @@ int main (int argc, char **argv) {
       samples1[j] = float(sin(t));
       t += tincr;
       }
-    encode (context, frame, pkt, f);
+    encode (context, frame, pkt, f, adts_container_ctx);
     }
-  encode (context, NULL, pkt, f);
+  encode (context, NULL, pkt, f, adts_container_ctx);
 
   fclose (f);
 
