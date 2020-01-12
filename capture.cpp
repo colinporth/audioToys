@@ -473,24 +473,24 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   }
 //}}}
 //{{{
-HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int frames) {
+HRESULT finishWaveFile (HMMIO file, MMCKINFO* pckRIFF, MMCKINFO* pckData, int frames) {
 
   MMRESULT result;
 
-  result = mmioAscend (hFile, pckData, 0);
+  result = mmioAscend (file, pckData, 0);
   if (MMSYSERR_NOERROR != result) {
     cLog::log (LOGERROR, "mmioAscend(\"data\" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
 
-  result = mmioAscend (hFile, pckRIFF, 0);
+  result = mmioAscend (file, pckRIFF, 0);
   if (MMSYSERR_NOERROR != result) {
     cLog::log (LOGERROR, "mmioAscend(\"RIFF/WAVE\" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
 
-  result = mmioClose (hFile, 0);
-  hFile = NULL;
+  result = mmioClose (file, 0);
+  file = NULL;
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioClose failed: MMSYSERR = %u", result);
@@ -501,9 +501,9 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   // everything went well... fixup the fact chunk in the file
 
   // reopen the file in read/write mode
-  MMIOINFO mi = {0};
-  hFile = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
-  if (NULL == hFile) {
+  MMIOINFO mi = { 0 };
+  file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
+  if (NULL == file) {
     //{{{
     cLog::log (LOGERROR, "mmioOpen failed");
     return -__LINE__;
@@ -513,7 +513,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   // descend into the RIFF/WAVE chunk
   MMCKINFO ckRIFF = {0};
   ckRIFF.ckid = MAKEFOURCC ('W', 'A', 'V', 'E'); // this is right for mmioDescend
-  result = mmioDescend (hFile, &ckRIFF, NULL, MMIO_FINDRIFF);
+  result = mmioDescend (file, &ckRIFF, NULL, MMIO_FINDRIFF);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
@@ -524,7 +524,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   // descend into the fact chunk
   MMCKINFO ckFact = {0};
   ckFact.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
-  result = mmioDescend (hFile, &ckFact, &ckRIFF, MMIO_FINDCHUNK);
+  result = mmioDescend (file, &ckFact, &ckRIFF, MMIO_FINDCHUNK);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
@@ -533,7 +533,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
     //}}}
 
   // write frames to the fact chunk
-  LONG bytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
+  LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
   if (bytesWritten != sizeof (frames)) {
     //{{{
     cLog::log (LOGERROR, "Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
@@ -542,13 +542,15 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
     //}}}
 
   // ascend out of the fact chunk
-  result = mmioAscend (hFile, &ckFact, 0);
+  result = mmioAscend (file, &ckFact, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
     return -__LINE__;
     }
     //}}}
+
+  mmioClose (file, 0);
 
   return S_OK;
   }
@@ -596,8 +598,7 @@ DWORD WINAPI captureThread (LPVOID param) {
   //{{{  coerce int16 waveFormat, in-place not changing size of format, engine auto-convert float to int
   switch (waveFormatEx->wFormatTag) {
     case WAVE_FORMAT_IEEE_FLOAT:
-      printf ("WAVE_FORMAT_IEEE_FLOAT\n");
-
+      cLog::log (LOGINFO, "WAVE_FORMAT_IEEE_FLOAT");
       waveFormatEx->wFormatTag = WAVE_FORMAT_PCM;
       waveFormatEx->wBitsPerSample = 16;
       waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
@@ -605,10 +606,10 @@ DWORD WINAPI captureThread (LPVOID param) {
       break;
 
     case WAVE_FORMAT_EXTENSIBLE: {
-      printf ("WAVE_FORMAT_EXTENSIBLE\n");
+      cLog::log (LOGINFO, "WAVE_FORMAT_EXTENSIBLE");
       PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
       if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
-        printf ("- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT\n");
+        cLog::log (LOGINFO, "- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT\n");
         pEx->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
         pEx->Samples.wValidBitsPerSample = 16;
         waveFormatEx->wBitsPerSample = 16;
@@ -728,7 +729,7 @@ DWORD WINAPI captureThread (LPVOID param) {
         }
         //}}}
 
-      //printf ("numFrames %d %d %d bytes:%d\n",
+      //cLog::log (LOGINFO, "numFrames %d %d %d bytes:%d\n",
 
       LONG bytesToWrite = numFramesToRead * waveFormatEx->nBlockAlign;
       int bytesAllocated = 0;
@@ -772,9 +773,6 @@ DWORD WINAPI captureThread (LPVOID param) {
     }
 
   finishWaveFile (file, &ckData, &ckRIFF, frames);
-
-  if (file)
-    mmioClose (file, 0);
 
   return 0;
   }
@@ -879,12 +877,20 @@ DWORD WINAPI readThread (LPVOID context) {
 //}}}
 
 //{{{
+void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
+  cLog::log (LOGINFO, fmt, vargs);
+  }
+//}}}
+//{{{
 int main() {
 
-  cLog::init (LOGINFO, true);
+  cLog::init (LOGINFO, false, "");
   cLog::log (LOGNOTICE, "capture");
 
-   CoInitialize (NULL);
+  //av_log_set_level (AV_LOG_VERBOSE);
+  av_log_set_callback (avLogCallback);
+
+  CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
 
   bipBuffer.allocateBuffer (1024 * 32);
