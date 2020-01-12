@@ -1,5 +1,9 @@
 // main.cpp
 //{{{  includes defines
+#define _CRT_SECURE_NO_WARNINGS
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+
 #include <stdio.h>
 #include <windows.h>
 
@@ -12,10 +16,120 @@
 
 #include <initguid.h>
 
+extern "C" {
+  #include <libavcodec/avcodec.h>
+  #include <libavcodec/avcodec.h>
+  #include <libavformat/avformat.h>
+  #include <libavutil/timestamp.h>
+  #include <libswresample/swresample.h>
+  }
+
 #define LOG(format, ...) wprintf (format L"\n", __VA_ARGS__)
 #define ERR(format, ...) LOG (L"Error: " format, __VA_ARGS__)
 //}}}
 #define DEFAULT_FILE L"loopback.wav"
+
+#define CHANNELS 2
+#define SAMPLE_RATE 44100
+#define ENCODER_BITRATE 128000
+//{{{
+int writeData (void* file, uint8_t* data, int size) {
+
+  fwrite (data, 1, size, (FILE*)file);
+  return size;
+  }
+//}}}
+
+//{{{
+void sine() {
+
+  FILE* file = fopen ("out.aac", "wb");
+
+  av_register_all();
+
+  AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
+
+  AVCodecContext* encoderContext = avcodec_alloc_context3 (codec);
+  encoderContext->sample_fmt = AV_SAMPLE_FMT_FLTP;
+  encoderContext->bit_rate = ENCODER_BITRATE;
+  encoderContext->sample_rate = SAMPLE_RATE;
+  encoderContext->channels = CHANNELS;
+  encoderContext->channel_layout = av_get_default_channel_layout (CHANNELS);
+  encoderContext->time_base.num = 1;
+  encoderContext->time_base.den = SAMPLE_RATE;
+  encoderContext->codec_type = AVMEDIA_TYPE_AUDIO ;
+  avcodec_open2 (encoderContext, codec, NULL);
+
+  // create ADTS container for encoded frames
+  AVOutputFormat* outputFormat = av_guess_format ("adts", NULL, NULL);
+  AVFormatContext* outputFormatContext = NULL;
+  avformat_alloc_output_context2 (&outputFormatContext, outputFormat, "", NULL);
+
+  // create ioContext for adts container with writeData callback
+  int outBufferSize = 4096;
+  uint8_t* outBuffer = (uint8_t*)av_malloc (outBufferSize);
+  AVIOContext* ioContext = avio_alloc_context (outBuffer, outBufferSize, 1, file, NULL, &writeData, NULL);
+
+  // link container's context to the previous I/O context
+  outputFormatContext->pb = ioContext;
+  AVStream* adts_stream = avformat_new_stream (outputFormatContext, NULL);
+  adts_stream->id = outputFormatContext->nb_streams-1;
+
+  // copy encoder's parameters
+  avcodec_parameters_from_context (adts_stream->codecpar, encoderContext);
+
+  // allocate stream private data and write the stream header
+  avformat_write_header (outputFormatContext, NULL);
+
+  // allocate an frame to be filled with input data.
+  AVFrame* frame = av_frame_alloc();
+  frame->format = AV_SAMPLE_FMT_FLTP;
+  frame->channels = CHANNELS;
+  frame->nb_samples = encoderContext->frame_size;
+  frame->sample_rate = SAMPLE_RATE;
+  frame->channel_layout = av_get_default_channel_layout (CHANNELS);
+
+  // allocate the frame's data buffer
+  av_frame_get_buffer (frame, 0);
+
+  AVPacket* packet = av_packet_alloc();
+
+  double t = 0.f;
+  double inc = 2.0 * M_PI * 440.0 / encoderContext->sample_rate;
+  for (int i = 0; i < 200; i++) {
+    auto samples0 = (float*)frame->data[0];
+    auto samples1 = (float*)frame->data[1];
+    for (auto j = 0; j < encoderContext->frame_size; j++) {
+      samples0[j] = float(sin(t));
+      samples1[j] = float(sin(t));
+      t += inc;
+      }
+
+    if (avcodec_send_frame (encoderContext, frame) == 0)
+      while (avcodec_receive_packet (encoderContext, packet) == 0)
+        if (av_write_frame (outputFormatContext, packet) < 0)
+          exit(0);
+    }
+
+  // Flush cached packets
+  if (avcodec_send_frame (encoderContext, NULL) == 0)
+    while (avcodec_receive_packet (encoderContext, packet) == 0)
+      if (av_write_frame (outputFormatContext, packet) < 0)
+        exit(0);
+
+  av_write_trailer (outputFormatContext);
+  fclose (file);
+
+  avcodec_free_context (&encoderContext);
+  av_frame_free (&frame);
+  avformat_free_context (outputFormatContext);
+  av_freep (&ioContext);
+  av_freep (&outBuffer);
+  av_packet_free (&packet);
+
+  return;
+  }
+//}}}
 
 //{{{
 class AudioClientStopOnExit {
@@ -160,24 +274,24 @@ private:
 //{{{
 class CPrefs {
 public:
-  CPrefs() : m_pMMDevice(NULL), m_hFile(NULL), m_bInt16(true), m_pwfx(NULL), m_szFilename(NULL) {
+  CPrefs() : m_MMDevice(NULL), m_hFile(NULL), m_bInt16(true), m_pwfx(NULL), m_szFilename(NULL) {
 
     list_devices();
-    get_default_device (&m_pMMDevice);
+    get_default_device (&m_MMDevice);
     m_szFilename = DEFAULT_FILE;
     open_file (m_szFilename, &m_hFile);
     }
 
   ~CPrefs() {
-    if (NULL != m_pMMDevice)
-      m_pMMDevice->Release();
+    if (NULL != m_MMDevice)
+      m_MMDevice->Release();
     if (NULL != m_hFile)
        mmioClose(m_hFile, 0);
     if (NULL != m_pwfx)
       CoTaskMemFree(m_pwfx);
     }
 
-  IMMDevice* m_pMMDevice;
+  IMMDevice* m_MMDevice;
   HMMIO m_hFile;
   bool m_bInt16;
   PWAVEFORMATEX m_pwfx;
@@ -189,15 +303,15 @@ private:
 
     // get an enumerator
     IMMDeviceEnumerator *pMMDeviceEnumerator;
-  HRESULT hr = CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                 __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator);
+    HRESULT hr = CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                   __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator);
     if (FAILED (hr)) {
       //{{{
       ERR (L"CoCreateInstance(IMMDeviceEnumerator) failed: hr = 0x%08x", hr);
       return hr;
       }
       //}}}
-    ReleaseOnExit releaseMMDeviceEnumerator(pMMDeviceEnumerator);
+    ReleaseOnExit releaseMMDeviceEnumerator (pMMDeviceEnumerator);
 
     // get all the active render endpoints
     IMMDeviceCollection* pMMDeviceCollection;
@@ -314,20 +428,6 @@ private:
 //}}}
 
 //{{{
-struct LoopbackCaptureThreadFunctionArguments {
-
-  IMMDevice* pMMDevice;
-  bool bInt16;
-
-  HMMIO hFile;
-  HANDLE hStartedEvent;
-  HANDLE hStopEvent;
-  UINT32 nFrames;
-
-  HRESULT hr;
-  };
-//}}}
-//{{{
 HRESULT WriteWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
 
   // make a RIFF/WAVE chunk
@@ -435,122 +535,124 @@ HRESULT FinishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
   return S_OK;
   }
 //}}}
+
 //{{{
-HRESULT LoopbackCapture (IMMDevice* pMMDevice, HMMIO hFile,
-                         bool bInt16, HANDLE hStartedEvent, HANDLE hStopEvent, PUINT32 pnFrames) {
+struct sCaptureContext {
+  IMMDevice* MMDevice;
+  bool bInt16;
+
+  HMMIO file;
+  HANDLE startEvent;
+  HANDLE stopEvent;
+  UINT32 frames;
+
+  HRESULT hr;
+  };
+//}}}
+//{{{
+void capture (sCaptureContext* context) {
 
   //{{{  activate an IAudioClient
-  IAudioClient* pAudioClient;
-  HRESULT hr = pMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
-  if (FAILED(hr)) {
-    ERR (L"IMMDevice::Activate (IAudioClient) failed: hr = 0x%08x", hr);
-    return hr;
+  IAudioClient* audioClient;
+  if (FAILED (context->MMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&audioClient))) {
+    ERR (L"IMMDevice::Activate (IAudioClient) failed");
+    return;
     }
 
-  ReleaseOnExit releaseAudioClient (pAudioClient);
+  ReleaseOnExit releaseAudioClient (audioClient);
   //}}}
   //{{{  get the default device periodicity
   REFERENCE_TIME hnsDefaultDevicePeriod;
-  hr = pAudioClient->GetDevicePeriod (&hnsDefaultDevicePeriod, NULL);
-  if (FAILED (hr)) {
-    ERR (L"IAudioClient::GetDevicePeriod failed: hr = 0x%08x", hr);
-    return hr;
+  if (FAILED (audioClient->GetDevicePeriod (&hnsDefaultDevicePeriod, NULL))) {
+    ERR (L"IAudioClient::GetDevicePeriod failed");
+    return;
     }
   //}}}
   //{{{  get the default device format
-  WAVEFORMATEX* pwfx;
-  hr = pAudioClient->GetMixFormat (&pwfx);
-  if (FAILED (hr)) {
-    ERR (L"IAudioClient::GetMixFormat failed: hr = 0x%08x", hr);
-    return hr;
+  WAVEFORMATEX* waveFormatEx;
+  if (FAILED (audioClient->GetMixFormat (&waveFormatEx))) {
+    ERR (L"IAudioClient::GetMixFormat failed");
+    return;
     }
 
-  CoTaskMemFreeOnExit freeMixFormat (pwfx);
+  CoTaskMemFreeOnExit freeMixFormat (waveFormatEx);
   //}}}
-
-  if (bInt16) {
-    //{{{  coerce int-16 wave format, can do this in-place not changing size of format, engine auto-convert float to int
-    switch (pwfx->wFormatTag) {
+  if (context->bInt16) {
+    //{{{  coerce int16 waveFormat, in-place not changing size of format, engine auto-convert float to int
+    switch (waveFormatEx->wFormatTag) {
       case WAVE_FORMAT_IEEE_FLOAT:
-        pwfx->wFormatTag = WAVE_FORMAT_PCM;
-        pwfx->wBitsPerSample = 16;
-        pwfx->nBlockAlign = pwfx->nChannels * pwfx->wBitsPerSample / 8;
-        pwfx->nAvgBytesPerSec = pwfx->nBlockAlign * pwfx->nSamplesPerSec;
+        printf ("WAVE_FORMAT_IEEE_FLOAT\n");
+
+        waveFormatEx->wFormatTag = WAVE_FORMAT_PCM;
+        waveFormatEx->wBitsPerSample = 16;
+        waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
+        waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
         break;
 
       case WAVE_FORMAT_EXTENSIBLE: {
-        PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(pwfx);
-        if (IsEqualGUID(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
+        printf ("WAVE_FORMAT_EXTENSIBLE\n");
+        PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
+        if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
+          printf ("- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT\n");
           pEx->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
           pEx->Samples.wValidBitsPerSample = 16;
-          pwfx->wBitsPerSample = 16;
-          pwfx->nBlockAlign = pwfx->nChannels * pwfx->wBitsPerSample / 8;
-          pwfx->nAvgBytesPerSec = pwfx->nBlockAlign * pwfx->nSamplesPerSec;
+          waveFormatEx->wBitsPerSample = 16;
+          waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
+          waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
           }
         else {
           //{{{
           ERR (L"%s", L"Don't know how to coerce mix format to int-16");
-          return E_UNEXPECTED;
+          return;
           }
           //}}}
-        }
+         }
         break;
 
       default:
-        //{{{
-        ERR (L"Don't know how to coerce WAVEFORMATEX with wFormatTag = 0x%08x to int-16", pwfx->wFormatTag);
-        return E_UNEXPECTED;
-        //}}}
+        ERR (L"Don't know how to coerce WAVEFORMATEX with wFormatTag = 0x%08x to int-16", waveFormatEx->wFormatTag);
+        return;
       }
     }
     //}}}
 
   MMCKINFO ckRIFF = {0};
   MMCKINFO ckData = {0};
-  hr = WriteWaveHeader (hFile, pwfx, &ckRIFF, &ckData);
-  if (FAILED(hr))
-    return hr;
+  if (FAILED (WriteWaveHeader (context->file, waveFormatEx, &ckRIFF, &ckData)))
+    return;
 
   //{{{  create a periodic waitable timer
-  HANDLE hWakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
-  if (NULL == hWakeUp) {
-    DWORD dwErr = GetLastError();
-    ERR (L"CreateWaitableTimer failed: last error = %u", dwErr);
-    return HRESULT_FROM_WIN32(dwErr);
+  HANDLE wakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
+  if (NULL == wakeUp) {
+    ERR (L"CreateWaitableTimer failed: last error = %u", GetLastError());
+    return;
     }
 
-  CloseHandleOnExit closeWakeUp (hWakeUp);
+  CloseHandleOnExit closeWakeUp (wakeUp);
   //}}}
-
-  UINT32 nBlockAlign = pwfx->nBlockAlign;
-  *pnFrames = 0;
-  //{{{  call IAudioClient::Initialize
+  //{{{  IAudioClient::Initialize
   // note that AUDCLNT_STREAMFLAGS_LOOPBACK and AUDCLNT_STREAMFLAGS_EVENTCALLBACK do not work together...
   // the "data ready" event never gets set so we're going to do a timer-driven loop
-  hr = pAudioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, pwfx, 0);
-  if (FAILED(hr)) {
-    ERR(L"IAudioClient::Initialize failed: hr = 0x%08x", hr);
-    return hr;
+  if (FAILED (audioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, waveFormatEx, 0))) {
+    ERR (L"IAudioClient::Initialize failed");
+    return;
     }
   //}}}
   //{{{  activate an IAudioCaptureClient
-  IAudioCaptureClient* pAudioCaptureClient;
-  hr = pAudioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&pAudioCaptureClient);
-  if (FAILED(hr)) {
-    ERR (L"IAudioClient::GetService(IAudioCaptureClient) failed: hr = 0x%08x", hr);
-    return hr;
+  IAudioCaptureClient* audioCaptureClient;
+  if (FAILED (audioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&audioCaptureClient))) {
+    ERR (L"IAudioClient::GetService (IAudioCaptureClient) failed");
+    return;
     }
 
-  ReleaseOnExit releaseAudioCaptureClient (pAudioCaptureClient);
+  ReleaseOnExit releaseAudioCaptureClient (audioCaptureClient);
   //}}}
   //{{{  register with MMCSS
   DWORD nTaskIndex = 0;
   HANDLE hTask = AvSetMmThreadCharacteristics (L"Audio", &nTaskIndex);
   if (NULL == hTask) {
-    // error
-    DWORD dwErr = GetLastError();
-    ERR (L"AvSetMmThreadCharacteristics failed: last error = %u", dwErr);
-    return HRESULT_FROM_WIN32 (dwErr);
+    ERR (L"AvSetMmThreadCharacteristics failed: last error = %u", GetLastError());
+    return;
     }
 
   AvRevertMmThreadCharacteristicsOnExit unregisterMmcss (hTask);
@@ -560,135 +662,112 @@ HRESULT LoopbackCapture (IMMDevice* pMMDevice, HMMIO hFile,
   liFirstFire.QuadPart = -hnsDefaultDevicePeriod / 2; // negative means relative time
   LONG lTimeBetweenFires = (LONG)hnsDefaultDevicePeriod / 2 / (10 * 1000); // convert to milliseconds
 
-  BOOL bOK = SetWaitableTimer (hWakeUp, &liFirstFire, lTimeBetweenFires, NULL, NULL, FALSE);
-  if (!bOK) {
-    DWORD dwErr = GetLastError();
-    ERR (L"SetWaitableTimer failed: last error = %u", dwErr);
-    return HRESULT_FROM_WIN32(dwErr);
+  if (!SetWaitableTimer (wakeUp, &liFirstFire, lTimeBetweenFires, NULL, NULL, FALSE)) {
+    ERR (L"SetWaitableTimer failed: last error = %u", GetLastError());
+    return;
     }
 
-  CancelWaitableTimerOnExit cancelWakeUp (hWakeUp);
+  CancelWaitableTimerOnExit cancelWakeUp (wakeUp);
   //}}}
-  //{{{  call IAudioClient::Start
-  hr = pAudioClient->Start();
-  if (FAILED(hr)) {
-    ERR (L"IAudioClient::Start failed: hr = 0x%08x", hr);
-    return hr;
+  //{{{  IAudioClient::Start
+  if (FAILED (audioClient->Start())) {
+    ERR (L"IAudioClient::Start failed");
+    return;
     }
 
-  AudioClientStopOnExit stopAudioClient (pAudioClient);
+  AudioClientStopOnExit stopAudioClient (audioClient);
   //}}}
 
-  SetEvent (hStartedEvent);
+  SetEvent (context->startEvent);
 
   // loopback capture loop
-  HANDLE waitArray[2] = { hStopEvent, hWakeUp };
-  DWORD dwWaitResult;
-  bool bDone = false;
-  bool bFirstPacket = true;
-  for (UINT32 nPasses = 0; !bDone; nPasses++) {
-    //{{{  drain data while it is available
-    UINT32 nNextPacketSize;
-    for (hr = pAudioCaptureClient->GetNextPacketSize (&nNextPacketSize); SUCCEEDED(hr) && nNextPacketSize > 0;
-         hr = pAudioCaptureClient->GetNextPacketSize (&nNextPacketSize)) {
-      // get the captured data
+  context->frames = 0;
+  HANDLE waitArray[2] = { context->stopEvent, wakeUp };
+  bool done = false;
+  while (!done) {
+    UINT32 packetSize;
+    audioCaptureClient->GetNextPacketSize (&packetSize);
+    while (packetSize > 0) {
       BYTE* pData;
-      UINT32 nNumFramesToRead;
+      UINT32 numFramesToRead;
       DWORD dwFlags;
-      hr = pAudioCaptureClient->GetBuffer (&pData, &nNumFramesToRead, &dwFlags, NULL, NULL);
-      if (FAILED(hr)) {
+      if (FAILED (audioCaptureClient->GetBuffer (&pData, &numFramesToRead, &dwFlags, NULL, NULL))) {
         //{{{
-        ERR(L"IAudioCaptureClient::GetBuffer failed on pass %u after %u frames: hr = 0x%08x", nPasses, *pnFrames, hr);
-        return hr;
+        ERR (L"IAudioCaptureClient::GetBuffer failed");
+        return;
+        }
+        //}}}
+      if ((context->frames == 0) && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
+        //{{{
+        LOG (L"%s", L"glitch on first packet");
+        }
+        //}}}
+      else if (dwFlags != 0) {
+        //{{{
+        LOG (L"IAudioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
+        return;
+        }
+        //}}}
+      if (numFramesToRead == 0) {
+        //{{{
+        ERR (L"IAudioCaptureClient::GetBuffer read 0 frames");
+        return;
         }
         //}}}
 
-      if (bFirstPacket && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
+      printf ("numFrames %d %d %d bytes:%d\n",
+        context->frames, numFramesToRead, waveFormatEx->nBlockAlign, numFramesToRead * waveFormatEx->nBlockAlign);
+
+      LONG bytesToWrite = numFramesToRead * waveFormatEx->nBlockAlign;
+      LONG bytesWritten = mmioWrite (context->file, reinterpret_cast<PCHAR>(pData), bytesToWrite);
+      if (bytesWritten != bytesToWrite) {
         //{{{
-        LOG(L"%s", L"Probably spurious glitch reported on first packet");
+        ERR (L"mmioWrite wrote %u bytes expected %u bytes", bytesWritten, bytesToWrite);
+        return;
         }
         //}}}
-      else if (0 != dwFlags) {
+      if (FAILED (audioCaptureClient->ReleaseBuffer (numFramesToRead))) {
         //{{{
-        LOG (L"IAudioCaptureClient::GetBuffer set flags to 0x%08x on pass %u after %u frames", dwFlags, nPasses, *pnFrames);
-        return E_UNEXPECTED;
+        ERR (L"IAudioCaptureClient::ReleaseBuffer failed");
+        return;
         }
         //}}}
 
-      if (0 == nNumFramesToRead) {
-        //{{{
-        ERR (L"IAudioCaptureClient::GetBuffer said to read 0 frames on pass %u after %u frames", nPasses, *pnFrames);
-        return E_UNEXPECTED;
-        }
-        //}}}
-
-      // printf ("numFrames %d %d %d\n", nNumFramesToRead, nNumFramesToRead, nBlockAlign);
-
-      LONG lBytesToWrite = nNumFramesToRead * nBlockAlign;
-      LONG lBytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(pData), lBytesToWrite);
-      if (lBytesToWrite != lBytesWritten) {
-        //{{{
-        ERR (L"mmioWrite wrote %u bytes on pass %u after %u frames: expected %u bytes", lBytesWritten, nPasses, *pnFrames, lBytesToWrite);
-        return E_UNEXPECTED;
-        }
-        //}}}
-      *pnFrames += nNumFramesToRead;
-
-      hr = pAudioCaptureClient->ReleaseBuffer (nNumFramesToRead);
-      if (FAILED(hr)) {
-        //{{{
-        ERR (L"IAudioCaptureClient::ReleaseBuffer failed on pass %u after %u frames: hr = 0x%08x", nPasses, *pnFrames, hr);
-        return hr;
-        }
-        //}}}
-      bFirstPacket = false;
+      context->frames += numFramesToRead;
+      audioCaptureClient->GetNextPacketSize (&packetSize);
       }
 
-    if (FAILED(hr)) {
-      //{{{
-      ERR (L"IAudioCaptureClient::GetNextPacketSize failed on pass %u after %u frames: hr = 0x%08x", nPasses, *pnFrames, hr);
-      return hr;
-      }
-      //}}}
-
-    dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE);
+    DWORD dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE);
     if (WAIT_OBJECT_0 == dwWaitResult) {
       //{{{
-      LOG (L"Received stop event after %u passes and %u frames", nPasses, *pnFrames);
-      bDone = true;
-      continue; // exits loop
+      LOG (L"Received stop event");
+      done = true;
       }
       //}}}
-    if (WAIT_OBJECT_0 + 1 != dwWaitResult) {
+    else if (WAIT_OBJECT_0 + 1 != dwWaitResult) {
       //{{{
-      ERR (L"Unexpected WaitForMultipleObjects return value %u on pass %u after %u frames", dwWaitResult, nPasses, *pnFrames);
-      return E_UNEXPECTED;
+      ERR (L"Unexpected WaitForMultipleObjects return value %u", dwWaitResult);
+      return;
       }
       //}}}
     }
-    //}}}
 
-  hr = FinishWaveFile (hFile, &ckData, &ckRIFF);
-  if (FAILED(hr))
-    return hr;
-
-  return hr;
+  FinishWaveFile (context->file, &ckData, &ckRIFF);
   }
 //}}}
 //{{{
-DWORD WINAPI LoopbackCaptureThreadFunction (LPVOID pContext) {
+DWORD WINAPI captureThread (LPVOID context) {
 
-  LoopbackCaptureThreadFunctionArguments* pArgs = (LoopbackCaptureThreadFunctionArguments*)pContext;
+  sCaptureContext* captureContext = (sCaptureContext*)context;
 
-  pArgs->hr = CoInitialize (NULL);
-  if (FAILED (pArgs->hr)) {
-    ERR (L"CoInitialize failed: hr = 0x%08x", pArgs->hr);
+  captureContext->hr = CoInitialize (NULL);
+  if (FAILED (captureContext->hr)) {
+    ERR (L"CoInitialize failed: hr = 0x%08x", captureContext->hr);
     return 0;
     }
   CoUninitializeOnExit cuoe;
 
-  pArgs->hr = LoopbackCapture (pArgs->pMMDevice, pArgs->hFile,
-                               pArgs->bInt16, pArgs->hStartedEvent, pArgs->hStopEvent, &pArgs->nFrames);
+  capture (captureContext);
 
   return 0;
   }
@@ -697,7 +776,7 @@ DWORD WINAPI LoopbackCaptureThreadFunction (LPVOID pContext) {
 //{{{
 int _cdecl wmain (int argc, LPCWSTR argv[]) {
 
-  HRESULT hr = CoInitialize(NULL);
+  HRESULT hr = CoInitialize (NULL);
   if (FAILED(hr)) {
     //{{{
     ERR(L"CoInitialize failed: hr = 0x%08x", hr);
@@ -715,38 +794,38 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
   CPrefs prefs;
 
   // create a "loopback capture has started" event
-  HANDLE hStartedEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
-  if (NULL == hStartedEvent) {
+  HANDLE startEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
+  if (NULL == startEvent) {
     //{{{
     ERR (L"CreateEvent failed: last error is %u", GetLastError());
     return -__LINE__;
     }
     //}}}
-  CloseHandleOnExit closeStartedEvent (hStartedEvent);
+  CloseHandleOnExit closeStartedEvent (startEvent);
 
   // create a "stop capturing now" event
-  HANDLE hStopEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
-  if (NULL == hStopEvent) {
+  HANDLE stopEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
+  if (NULL == stopEvent) {
     //{{{
     ERR (L"CreateEvent failed: last error is %u", GetLastError());
     return -__LINE__;
     }
     //}}}
 
-  CloseHandleOnExit closeStopEvent (hStopEvent);
+  CloseHandleOnExit closeStopEvent (stopEvent);
 
   // create arguments for loopback capture thread
-  LoopbackCaptureThreadFunctionArguments threadArgs;
-  threadArgs.hr = E_UNEXPECTED; // thread will overwrite this
-  threadArgs.pMMDevice = prefs.m_pMMDevice;
-  threadArgs.bInt16 = prefs.m_bInt16;
-  threadArgs.hFile = prefs.m_hFile;
-  threadArgs.hStartedEvent = hStartedEvent;
-  threadArgs.hStopEvent = hStopEvent;
-  threadArgs.nFrames = 0;
+  sCaptureContext captureContext;
+  captureContext.MMDevice = prefs.m_MMDevice;
+  captureContext.bInt16 = prefs.m_bInt16;
+  captureContext.file = prefs.m_hFile;
+  captureContext.startEvent = startEvent;
+  captureContext.stopEvent = stopEvent;
+  captureContext.frames = 0;
+  captureContext.hr = E_UNEXPECTED; // thread will overwrite this
 
-  HANDLE hThread = CreateThread (NULL, 0, LoopbackCaptureThreadFunction, &threadArgs, 0, NULL );
-  if (NULL == hThread) {
+  HANDLE hThread = CreateThread (NULL, 0, captureThread, &captureContext, 0, NULL );
+  if (hThread == NULL) {
     //{{{
     ERR (L"CreateThread failed: last error is %u", GetLastError());
     return -__LINE__;
@@ -755,13 +834,12 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
   CloseHandleOnExit closeThread (hThread);
 
   // wait for either capture to start or the thread to end
-  HANDLE waitArray[2] = { hStartedEvent, hThread };
-  DWORD dwWaitResult;
-  dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE );
+  HANDLE waitArray[2] = { startEvent, hThread };
+  DWORD dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE );
 
   if (WAIT_OBJECT_0 + 1 == dwWaitResult) {
     //{{{
-    ERR (L"Thread aborted before starting to loopback capture: hr = 0x%08x", threadArgs.hr);
+    ERR (L"Thread aborted before starting to loopback capture: hr = 0x%08x", captureContext.hr);
     return -__LINE__;
     }
     //}}}
@@ -772,10 +850,9 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     }
     //}}}
 
-  // at this point capture is running
-  // wait for the user to press a key or for capture to error out
-  WaitForSingleObjectOnExit waitForThread(hThread);
-  SetEventOnExit setStopEvent (hStopEvent);
+  // at this point capture is running .wait for the user to press a key or for capture to error out
+  WaitForSingleObjectOnExit waitForThread (hThread);
+  SetEventOnExit setStopEvent (stopEvent);
   HANDLE hStdIn = GetStdHandle (STD_INPUT_HANDLE);
   if (INVALID_HANDLE_VALUE == hStdIn) {
     //{{{
@@ -844,9 +921,9 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     return -__LINE__;
     }
     //}}}
-  if (S_OK != threadArgs.hr) {
+  if (S_OK != captureContext.hr) {
     //{{{
-    ERR(L"Thread HRESULT is 0x%08x", threadArgs.hr);
+    ERR(L"Thread HRESULT is 0x%08x", captureContext.hr);
     return -__LINE__;
     }
     //}}}
@@ -856,7 +933,7 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
   prefs.m_hFile = NULL;
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR(L"mmioClose failed: MMSYSERR = %u", result);
+    ERR (L"mmioClose failed: MMSYSERR = %u", result);
     return -__LINE__;
     }
     //}}}
@@ -894,10 +971,10 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     //}}}
 
   // write the correct data to the fact chunk
-  LONG lBytesWritten = mmioWrite (prefs.m_hFile, reinterpret_cast<PCHAR>(&threadArgs.nFrames), sizeof(threadArgs.nFrames));
-  if (lBytesWritten != sizeof (threadArgs.nFrames)) {
+  LONG bytesWritten = mmioWrite (prefs.m_hFile, reinterpret_cast<PCHAR>(&captureContext.frames), sizeof(captureContext.frames));
+  if (bytesWritten != sizeof (captureContext.frames)) {
     //{{{
-    ERR (L"Updating the fact chunk wrote %u bytes; expected %u", lBytesWritten, (UINT32)sizeof(threadArgs.nFrames));
+    ERR (L"Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(captureContext.frames));
     return -__LINE__;
     }
     //}}}

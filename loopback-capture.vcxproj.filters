@@ -7,6 +7,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="aacAdts.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
 </Project>

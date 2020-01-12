@@ -31,7 +31,7 @@
  * @example encode_raw_audio_file_to_aac.c
  */
 //}}}
-//{{{
+//{{{  includes
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -45,9 +45,9 @@ extern "C" {
   }
 //}}}
 
-#define ENCODER_BITRATE 64000
-#define SAMPLE_RATE 44100
 #define CHANNELS 2
+#define SAMPLE_RATE 44100
+#define ENCODER_BITRATE 128000
 
 //{{{
 int writeData (void* file, uint8_t* data, int size) {
@@ -76,12 +76,12 @@ int main() {
   encoderContext->codec_type = AVMEDIA_TYPE_AUDIO ;
   avcodec_open2 (encoderContext, codec, NULL);
 
-  //  Create ADTS container for encoded frames
+  // create ADTS container for encoded frames
   AVOutputFormat* outputFormat = av_guess_format ("adts", NULL, NULL);
   AVFormatContext* outputFormatContext = NULL;
   avformat_alloc_output_context2 (&outputFormatContext, outputFormat, "", NULL);
 
-  // Create ioContext for adts container with writeData callback
+  // create ioContext for adts container with writeData callback
   int outBufferSize = 4096;
   uint8_t* outBuffer = (uint8_t*)av_malloc (outBufferSize);
   AVIOContext* ioContext = avio_alloc_context (outBuffer, outBufferSize, 1, file, NULL, &writeData, NULL);
@@ -91,13 +91,13 @@ int main() {
   AVStream* adts_stream = avformat_new_stream (outputFormatContext, NULL);
   adts_stream->id = outputFormatContext->nb_streams-1;
 
-  // Copy encoder's parameters
+  // copy encoder's parameters
   avcodec_parameters_from_context (adts_stream->codecpar, encoderContext);
 
-  // Allocate stream private data and write the stream header
+  // allocate stream private data and write the stream header
   avformat_write_header (outputFormatContext, NULL);
 
-  // Allocate an frame to be filled with input data.
+  // allocate an frame to be filled with input data.
   AVFrame* frame = av_frame_alloc();
   frame->format = AV_SAMPLE_FMT_FLTP;
   frame->channels = CHANNELS;
@@ -109,9 +109,9 @@ int main() {
   av_frame_get_buffer (frame, 0);
 
   AVPacket* packet = av_packet_alloc();
+
   double t = 0.f;
   double inc = 2.0 * M_PI * 440.0 / encoderContext->sample_rate;
-
   for (int i = 0; i < 200; i++) {
     auto samples0 = (float*)frame->data[0];
     auto samples1 = (float*)frame->data[1];
