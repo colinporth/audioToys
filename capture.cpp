@@ -391,7 +391,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   pckRIFF->ckid = MAKEFOURCC ('R', 'I', 'F', 'F');
   pckRIFF->fccType = MAKEFOURCC ('W', 'A', 'V', 'E');
 
-  MMRESULT result = mmioCreateChunk(hFile, pckRIFF, MMIO_CREATERIFF);
+  MMRESULT result = mmioCreateChunk (hFile, pckRIFF, MMIO_CREATERIFF);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioCreateChunk (\"RIFF/WAVE\") failed: MMRESULT = 0x%08x", result);
@@ -401,8 +401,8 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
 
   // make a 'fmt ' chunk (within the RIFF/WAVE chunk)
   MMCKINFO chunk;
-  chunk.ckid = MAKEFOURCC('f', 'm', 't', ' ');
-  result = mmioCreateChunk(hFile, &chunk, 0);
+  chunk.ckid = MAKEFOURCC ('f', 'm', 't', ' ');
+  result = mmioCreateChunk (hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
@@ -430,8 +430,8 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
     //}}}
 
   // make a 'fact' chunk whose data is (DWORD)0
-  chunk.ckid = MAKEFOURCC('f', 'a', 'c', 't');
-  result = mmioCreateChunk(hFile, &chunk, 0);
+  chunk.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
+  result = mmioCreateChunk (hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
@@ -442,8 +442,8 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   // write (DWORD)0 to it
   // this is cleaned up later
   DWORD frames = 0;
-  lBytesWritten = mmioWrite(hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
-  if (lBytesWritten != sizeof(frames)) {
+  lBytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
+  if (lBytesWritten != sizeof (frames)) {
     //{{{
     cLog::log (LOGERROR, "mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(frames));
     return E_FAIL;
@@ -451,7 +451,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
     //}}}
 
   // ascend from the 'fact' chunk
-  result = mmioAscend(hFile, &chunk, 0);
+  result = mmioAscend (hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioAscend (\"fact\" failed: MMRESULT = 0x%08x", result);
@@ -460,8 +460,8 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
     //}}}
 
   // make a 'data' chunk and leave the data pointer there
-  pckData->ckid = MAKEFOURCC('d', 'a', 't', 'a');
-  result = mmioCreateChunk(hFile, pckData, 0);
+  pckData->ckid = MAKEFOURCC ('d', 'a', 't', 'a');
+  result = mmioCreateChunk (hFile, pckData, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
     cLog::log (LOGERROR, "mmioCreateChunk(\"data\") failed: MMRESULT = 0x%08x", result);
@@ -566,6 +566,7 @@ struct sCaptureContext {
 DWORD WINAPI captureThread (LPVOID param) {
 
   sCaptureContext* context = (sCaptureContext*)param;
+  cLog::setThreadName ("capt");
 
   CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
@@ -609,7 +610,7 @@ DWORD WINAPI captureThread (LPVOID param) {
       cLog::log (LOGINFO, "WAVE_FORMAT_EXTENSIBLE");
       PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
       if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
-        cLog::log (LOGINFO, "- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT\n");
+        cLog::log (LOGINFO, "- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT");
         pEx->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
         pEx->Samples.wValidBitsPerSample = 16;
         waveFormatEx->wBitsPerSample = 16;
@@ -781,6 +782,7 @@ DWORD WINAPI captureThread (LPVOID param) {
 DWORD WINAPI readThread (LPVOID context) {
 
   sCaptureContext* captureContext = (sCaptureContext*)context;
+  cLog::setThreadName ("read");
 
   CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
@@ -829,6 +831,8 @@ DWORD WINAPI readThread (LPVOID context) {
   frame->sample_rate = SAMPLE_RATE;
   frame->channel_layout = av_get_default_channel_layout (CHANNELS);
 
+  cLog::log (LOGINFO, "frame_size %d", encoderContext->frame_size);
+
   // allocate the frame's data buffer
   av_frame_get_buffer (frame, 0);
 
@@ -838,12 +842,12 @@ DWORD WINAPI readThread (LPVOID context) {
     int len = encoderContext->frame_size;
     auto ptr = (int16_t*)bipBuffer.getContiguousBlock (len);
     if (len >= encoderContext->frame_size) {
-      cLog::log (LOGINFO, "read block %d", len);
-      auto samples0 = (float*)frame->data[0];
-      auto samples1 = (float*)frame->data[1];
-      for (auto j = 0; j < encoderContext->frame_size; j++) {
-        samples0[j] = float(*ptr++) / 0x10000;
-        samples1[j] = float(*ptr++) / 0x10000;
+      cLog::log (LOGINFO1, "read block %d", len);
+      auto samplesL = (float*)frame->data[0];
+      auto samplesR = (float*)frame->data[1];
+      for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
+        samplesL[sample] = float(*ptr++) / 0x10000;
+        samplesR[sample] = float(*ptr++) / 0x10000;
         }
       bipBuffer.decommitBlock (len);
 
