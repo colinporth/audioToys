@@ -24,10 +24,14 @@ extern "C" {
   #include <libswresample/swresample.h>
   }
 
+#include "../shared/utils/cBipBuffer.h"
+
 #define LOG(format, ...) wprintf (format L"\n", __VA_ARGS__)
 #define ERR(format, ...) LOG (L"Error: " format, __VA_ARGS__)
 //}}}
 #define DEFAULT_FILE L"loopback.wav"
+
+cBipBuffer bipBuffer;
 
 #define CHANNELS 2
 #define SAMPLE_RATE 44100
@@ -413,7 +417,7 @@ private:
 
     // some flags cause mmioOpen write to this buffer, but not any that we're using
     MMIOINFO mi = {0};
-    *phFile = mmioOpen (const_cast<LPWSTR>(szFileName), &mi, MMIO_WRITE | MMIO_CREATE);
+    *phFile = mmioOpen (const_cast<LPWSTR>(szFileName), &mi, MMIO_READWRITE | MMIO_CREATE);
     if (NULL == *phFile) {
       //{{{
       ERR (L"mmioOpen(\"%ls\", ...) failed. wErrorRet == %u", szFileName, mi.wErrorRet);
@@ -428,7 +432,7 @@ private:
 //}}}
 
 //{{{
-HRESULT WriteWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
+HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
 
   // make a RIFF/WAVE chunk
   pckRIFF->ckid = MAKEFOURCC ('R', 'I', 'F', 'F');
@@ -516,7 +520,7 @@ HRESULT WriteWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   }
 //}}}
 //{{{
-HRESULT FinishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
+HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int frames) {
 
   MMRESULT result;
 
@@ -526,11 +530,72 @@ HRESULT FinishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
     return E_FAIL;
     }
 
-  result = mmioAscend(hFile, pckRIFF, 0);
+  result = mmioAscend (hFile, pckRIFF, 0);
   if (MMSYSERR_NOERROR != result) {
     ERR (L"mmioAscend(\"RIFF/WAVE\" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
+
+  result = mmioClose (hFile, 0);
+  hFile = NULL;
+  if (MMSYSERR_NOERROR != result) {
+    //{{{
+    ERR (L"mmioClose failed: MMSYSERR = %u", result);
+    return -__LINE__;
+    }
+    //}}}
+
+  // everything went well... fixup the fact chunk in the file
+
+  // reopen the file in read/write mode
+  MMIOINFO mi = {0};
+  hFile = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
+  if (NULL == hFile) {
+    //{{{
+    ERR (L"mmioOpen failed");
+    return -__LINE__;
+    }
+    //}}}
+
+  // descend into the RIFF/WAVE chunk
+  MMCKINFO ckRIFF = {0};
+  ckRIFF.ckid = MAKEFOURCC ('W', 'A', 'V', 'E'); // this is right for mmioDescend
+  result = mmioDescend (hFile, &ckRIFF, NULL, MMIO_FINDRIFF);
+  if (MMSYSERR_NOERROR != result) {
+    //{{{
+    ERR (L"mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
+    return -__LINE__;
+    }
+    //}}}
+
+  // descend into the fact chunk
+  MMCKINFO ckFact = {0};
+  ckFact.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
+  result = mmioDescend (hFile, &ckFact, &ckRIFF, MMIO_FINDCHUNK);
+  if (MMSYSERR_NOERROR != result) {
+    //{{{
+    ERR (L"mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
+    return -__LINE__;
+    }
+    //}}}
+
+  // write frames to the fact chunk
+  LONG bytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
+  if (bytesWritten != sizeof (frames)) {
+    //{{{
+    ERR (L"Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
+    return -__LINE__;
+    }
+    //}}}
+
+  // ascend out of the fact chunk
+  result = mmioAscend (hFile, &ckFact, 0);
+  if (MMSYSERR_NOERROR != result) {
+    //{{{
+    ERR (L"mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
+    return -__LINE__;
+    }
+    //}}}
 
   return S_OK;
   }
@@ -542,7 +607,6 @@ struct sCaptureContext {
   bool bInt16;
 
   HMMIO file;
-  HANDLE startEvent;
   HANDLE stopEvent;
   UINT32 frames;
 
@@ -618,7 +682,7 @@ void capture (sCaptureContext* context) {
 
   MMCKINFO ckRIFF = {0};
   MMCKINFO ckData = {0};
-  if (FAILED (WriteWaveHeader (context->file, waveFormatEx, &ckRIFF, &ckData)))
+  if (FAILED (writeWaveHeader (context->file, waveFormatEx, &ckRIFF, &ckData)))
     return;
 
   //{{{  create a periodic waitable timer
@@ -678,8 +742,6 @@ void capture (sCaptureContext* context) {
   AudioClientStopOnExit stopAudioClient (audioClient);
   //}}}
 
-  SetEvent (context->startEvent);
-
   // loopback capture loop
   context->frames = 0;
   HANDLE waitArray[2] = { context->stopEvent, wakeUp };
@@ -719,6 +781,14 @@ void capture (sCaptureContext* context) {
         context->frames, numFramesToRead, waveFormatEx->nBlockAlign, numFramesToRead * waveFormatEx->nBlockAlign);
 
       LONG bytesToWrite = numFramesToRead * waveFormatEx->nBlockAlign;
+
+      int bytesAllocated = 0;
+      uint8_t* ptr = bipBuffer.reserve (bytesToWrite, bytesAllocated);
+      if (ptr && (bytesAllocated == bytesToWrite)) {
+        memcpy (ptr, pData, bytesAllocated);
+        bipBuffer.commit (bytesAllocated);
+        }
+
       LONG bytesWritten = mmioWrite (context->file, reinterpret_cast<PCHAR>(pData), bytesToWrite);
       if (bytesWritten != bytesToWrite) {
         //{{{
@@ -732,6 +802,10 @@ void capture (sCaptureContext* context) {
         return;
         }
         //}}}
+
+
+
+
 
       context->frames += numFramesToRead;
       audioCaptureClient->GetNextPacketSize (&packetSize);
@@ -752,7 +826,7 @@ void capture (sCaptureContext* context) {
       //}}}
     }
 
-  FinishWaveFile (context->file, &ckData, &ckRIFF);
+  finishWaveFile (context->file, &ckData, &ckRIFF, context->frames);
   }
 //}}}
 //{{{
@@ -768,6 +842,28 @@ DWORD WINAPI captureThread (LPVOID context) {
   CoUninitializeOnExit cuoe;
 
   capture (captureContext);
+
+  return 0;
+  }
+//}}}
+//{{{
+DWORD WINAPI readThread (LPVOID context) {
+
+  sCaptureContext* captureContext = (sCaptureContext*)context;
+
+  captureContext->hr = CoInitialize (NULL);
+  CoUninitializeOnExit cuoe;
+
+  while (true) {
+    int len;
+    bipBuffer.getContiguousBlock (len);
+    if (len) {
+      bipBuffer.decommitBlock (len);
+      printf ("read block %d\n", len);
+      }
+    else
+      Sleep (1);
+    }
 
   return 0;
   }
@@ -790,18 +886,10 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
   LPCWSTR nn = argv[0];
   printf ("%d %ls", a, nn);
 
+  bipBuffer.allocateBuffer (1024 * 32);
+
   // parse command line
   CPrefs prefs;
-
-  // create a "loopback capture has started" event
-  HANDLE startEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
-  if (NULL == startEvent) {
-    //{{{
-    ERR (L"CreateEvent failed: last error is %u", GetLastError());
-    return -__LINE__;
-    }
-    //}}}
-  CloseHandleOnExit closeStartedEvent (startEvent);
 
   // create a "stop capturing now" event
   HANDLE stopEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
@@ -811,7 +899,6 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     return -__LINE__;
     }
     //}}}
-
   CloseHandleOnExit closeStopEvent (stopEvent);
 
   // create arguments for loopback capture thread
@@ -819,10 +906,18 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
   captureContext.MMDevice = prefs.m_MMDevice;
   captureContext.bInt16 = prefs.m_bInt16;
   captureContext.file = prefs.m_hFile;
-  captureContext.startEvent = startEvent;
   captureContext.stopEvent = stopEvent;
   captureContext.frames = 0;
   captureContext.hr = E_UNEXPECTED; // thread will overwrite this
+
+  HANDLE hReadThread = CreateThread (NULL, 0, readThread, &captureContext, 0, NULL );
+  if (hReadThread == NULL) {
+    //{{{
+    ERR (L"CreateThread failed: last error is %u", GetLastError());
+    return -__LINE__;
+    }
+    //}}}
+  CloseHandleOnExit closeThread1 (hReadThread);
 
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &captureContext, 0, NULL );
   if (hThread == NULL) {
@@ -832,23 +927,6 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     }
     //}}}
   CloseHandleOnExit closeThread (hThread);
-
-  // wait for either capture to start or the thread to end
-  HANDLE waitArray[2] = { startEvent, hThread };
-  DWORD dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE );
-
-  if (WAIT_OBJECT_0 + 1 == dwWaitResult) {
-    //{{{
-    ERR (L"Thread aborted before starting to loopback capture: hr = 0x%08x", captureContext.hr);
-    return -__LINE__;
-    }
-    //}}}
-  if (WAIT_OBJECT_0 != dwWaitResult) {
-    //{{{
-    ERR (L"Unexpected WaitForMultipleObjects return value %u", dwWaitResult);
-    return -__LINE__;
-    }
-    //}}}
 
   // at this point capture is running .wait for the user to press a key or for capture to error out
   WaitForSingleObjectOnExit waitForThread (hThread);
@@ -861,14 +939,10 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     }
     //}}}
 
-  LOG(L"%s", L"Press Enter to quit...");
-
   HANDLE rhHandles[2] = { hThread, hStdIn };
-
   bool bKeepWaiting = true;
   while (bKeepWaiting) {
-    dwWaitResult = WaitForMultipleObjects (2, rhHandles, FALSE, INFINITE);
-
+    auto dwWaitResult = WaitForMultipleObjects (2, rhHandles, FALSE, INFINITE);
     switch (dwWaitResult) {
       case WAIT_OBJECT_0: // hThread
         ERR (L"%s", L"The thread terminated early - something bad happened");
@@ -906,87 +980,6 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
         break;
       }
     }
-
-  // at this point the thread is definitely finished
-  DWORD exitCode;
-  if (!GetExitCodeThread (hThread, &exitCode)) {
-    //{{{
-    ERR(L"GetExitCodeThread failed: last error is %u", GetLastError());
-    return -__LINE__;
-    }
-    //}}}
-  if (0 != exitCode) {
-    //{{{
-    ERR(L"Loopback capture thread exit code is %u; expected 0", exitCode);
-    return -__LINE__;
-    }
-    //}}}
-  if (S_OK != captureContext.hr) {
-    //{{{
-    ERR(L"Thread HRESULT is 0x%08x", captureContext.hr);
-    return -__LINE__;
-    }
-    //}}}
-
-  // everything went well... fixup the fact chunk in the file
-  MMRESULT result = mmioClose (prefs.m_hFile, 0);
-  prefs.m_hFile = NULL;
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    ERR (L"mmioClose failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  // reopen the file in read/write mode
-  MMIOINFO mi = {0};
-  prefs.m_hFile = mmioOpen (const_cast<LPWSTR>(prefs.m_szFilename), &mi, MMIO_READWRITE);
-  if (NULL == prefs.m_hFile) {
-    //{{{
-    ERR (L"mmioOpen(\"%ls\", ...) failed. wErrorRet == %u", prefs.m_szFilename, mi.wErrorRet);
-    return -__LINE__;
-    }
-    //}}}
-
-  // descend into the RIFF/WAVE chunk
-  MMCKINFO ckRIFF = {0};
-  ckRIFF.ckid = MAKEFOURCC ('W', 'A', 'V', 'E'); // this is right for mmioDescend
-  result = mmioDescend (prefs.m_hFile, &ckRIFF, NULL, MMIO_FINDRIFF);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    ERR (L"mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  // descend into the fact chunk
-  MMCKINFO ckFact = {0};
-  ckFact.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
-  result = mmioDescend (prefs.m_hFile, &ckFact, &ckRIFF, MMIO_FINDCHUNK);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    ERR (L"mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  // write the correct data to the fact chunk
-  LONG bytesWritten = mmioWrite (prefs.m_hFile, reinterpret_cast<PCHAR>(&captureContext.frames), sizeof(captureContext.frames));
-  if (bytesWritten != sizeof (captureContext.frames)) {
-    //{{{
-    ERR (L"Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(captureContext.frames));
-    return -__LINE__;
-    }
-    //}}}
-
-  // ascend out of the fact chunk
-  result = mmioAscend (prefs.m_hFile, &ckFact, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    ERR (L"mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
 
   // let prefs' destructor call mmioClose
   return 0;
