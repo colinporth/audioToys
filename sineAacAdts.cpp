@@ -59,9 +59,7 @@ int writeData (void* file, uint8_t* data, int size) {
 
 int main() {
 
-  FILE* file = fopen ("out.aac", "wb");
-
-  av_register_all();
+  FILE* file = fopen ("sine.aac", "wb");
 
   AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
 
@@ -112,12 +110,12 @@ int main() {
 
   double t = 0.f;
   double inc = 2.0 * M_PI * 440.0 / encoderContext->sample_rate;
-  for (int i = 0; i < 200; i++) {
-    auto samples0 = (float*)frame->data[0];
-    auto samples1 = (float*)frame->data[1];
-    for (auto j = 0; j < encoderContext->frame_size; j++) {
-      samples0[j] = float(sin(t));
-      samples1[j] = float(sin(t));
+  for (int frameNum = 0; frameNum < 600; frameNum++) {
+    auto samplesL = (float*)frame->data[0];
+    auto samplesR = (float*)frame->data[1];
+    for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
+      samplesL[sample] = float (sin (t));
+      samplesR[sample] = float (sin (t));
       t += inc;
       }
 
@@ -125,6 +123,9 @@ int main() {
       while (avcodec_receive_packet (encoderContext, packet) == 0)
         if (av_write_frame (outputFormatContext, packet) < 0)
           exit(0);
+
+    if (frameNum % 60 == 59)
+      inc *= 1.f + (1.f/12.f);
     }
 
   // Flush cached packets

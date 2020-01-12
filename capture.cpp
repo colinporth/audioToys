@@ -49,8 +49,6 @@ void sine() {
 
   FILE* file = fopen ("out.aac", "wb");
 
-  av_register_all();
-
   AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
 
   AVCodecContext* encoderContext = avcodec_alloc_context3 (codec);
@@ -855,8 +853,6 @@ DWORD WINAPI readThread (LPVOID context) {
   CoUninitializeOnExit cuoe;
 
   FILE* file = fopen ("out.aac", "wb");
-
-  av_register_all();
 
   AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
 
