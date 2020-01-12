@@ -1,4 +1,4 @@
-// main.cpp
+// capture.cpp
 //{{{  includes defines
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
@@ -29,7 +29,7 @@ extern "C" {
 #define LOG(format, ...) wprintf (format L"\n", __VA_ARGS__)
 #define ERR(format, ...) LOG (L"Error: " format, __VA_ARGS__)
 //}}}
-#define DEFAULT_FILE L"loopback.wav"
+#define DEFAULT_FILE L"out.wav"
 
 cBipBuffer bipBuffer;
 
@@ -777,8 +777,8 @@ void capture (sCaptureContext* context) {
         }
         //}}}
 
-      printf ("numFrames %d %d %d bytes:%d\n",
-        context->frames, numFramesToRead, waveFormatEx->nBlockAlign, numFramesToRead * waveFormatEx->nBlockAlign);
+      //printf ("numFrames %d %d %d bytes:%d\n",
+      //  context->frames, numFramesToRead, waveFormatEx->nBlockAlign, numFramesToRead * waveFormatEx->nBlockAlign);
 
       LONG bytesToWrite = numFramesToRead * waveFormatEx->nBlockAlign;
 
@@ -851,19 +851,97 @@ DWORD WINAPI readThread (LPVOID context) {
 
   sCaptureContext* captureContext = (sCaptureContext*)context;
 
-  captureContext->hr = CoInitialize (NULL);
+  CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
 
+  FILE* file = fopen ("out.aac", "wb");
+
+  av_register_all();
+
+  AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
+
+  AVCodecContext* encoderContext = avcodec_alloc_context3 (codec);
+  encoderContext->sample_fmt = AV_SAMPLE_FMT_FLTP;
+  encoderContext->bit_rate = ENCODER_BITRATE;
+  encoderContext->sample_rate = SAMPLE_RATE;
+  encoderContext->channels = CHANNELS;
+  encoderContext->channel_layout = av_get_default_channel_layout (CHANNELS);
+  encoderContext->time_base.num = 1;
+  encoderContext->time_base.den = SAMPLE_RATE;
+  encoderContext->codec_type = AVMEDIA_TYPE_AUDIO ;
+  avcodec_open2 (encoderContext, codec, NULL);
+
+  // create ADTS container for encoded frames
+  AVOutputFormat* outputFormat = av_guess_format ("adts", NULL, NULL);
+  AVFormatContext* outputFormatContext = NULL;
+  avformat_alloc_output_context2 (&outputFormatContext, outputFormat, "", NULL);
+
+  // create ioContext for adts container with writeData callback
+  int outBufferSize = 4096;
+  uint8_t* outBuffer = (uint8_t*)av_malloc (outBufferSize);
+  AVIOContext* ioContext = avio_alloc_context (outBuffer, outBufferSize, 1, file, NULL, &writeData, NULL);
+
+  // link container's context to the previous I/O context
+  outputFormatContext->pb = ioContext;
+  AVStream* adts_stream = avformat_new_stream (outputFormatContext, NULL);
+  adts_stream->id = outputFormatContext->nb_streams-1;
+
+  // copy encoder's parameters
+  avcodec_parameters_from_context (adts_stream->codecpar, encoderContext);
+
+  // allocate stream private data and write the stream header
+  avformat_write_header (outputFormatContext, NULL);
+
+  // allocate an frame to be filled with input data.
+  AVFrame* frame = av_frame_alloc();
+  frame->format = AV_SAMPLE_FMT_FLTP;
+  frame->channels = CHANNELS;
+  frame->nb_samples = encoderContext->frame_size;
+  frame->sample_rate = SAMPLE_RATE;
+  frame->channel_layout = av_get_default_channel_layout (CHANNELS);
+
+  // allocate the frame's data buffer
+  av_frame_get_buffer (frame, 0);
+
+  AVPacket* packet = av_packet_alloc();
+
   while (true) {
-    int len;
-    bipBuffer.getContiguousBlock (len);
-    if (len) {
-      bipBuffer.decommitBlock (len);
+    int len = encoderContext->frame_size;
+    auto ptr = (int16_t*)bipBuffer.getContiguousBlock (len);
+    if (len >= encoderContext->frame_size) {
       printf ("read block %d\n", len);
+      auto samples0 = (float*)frame->data[0];
+      auto samples1 = (float*)frame->data[1];
+      for (auto j = 0; j < encoderContext->frame_size; j++) {
+        samples0[j] = float(*ptr++) / 0x10000;
+        samples1[j] = float(*ptr++) / 0x10000;
+        }
+      bipBuffer.decommitBlock (len);
+
+      if (avcodec_send_frame (encoderContext, frame) == 0)
+        while (avcodec_receive_packet (encoderContext, packet) == 0)
+          if (av_write_frame (outputFormatContext, packet) < 0)
+            exit(0);
       }
     else
       Sleep (1);
     }
+
+  // Flush cached packets
+  if (avcodec_send_frame (encoderContext, NULL) == 0)
+    while (avcodec_receive_packet (encoderContext, packet) == 0)
+      if (av_write_frame (outputFormatContext, packet) < 0)
+        exit(0);
+
+  av_write_trailer (outputFormatContext);
+  fclose (file);
+
+  avcodec_free_context (&encoderContext);
+  av_frame_free (&frame);
+  avformat_free_context (outputFormatContext);
+  av_freep (&ioContext);
+  av_freep (&outBuffer);
+  av_packet_free (&packet);
 
   return 0;
   }
