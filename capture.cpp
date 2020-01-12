@@ -24,17 +24,17 @@ extern "C" {
   #include <libswresample/swresample.h>
   }
 
-#include "../shared/utils/cBipBuffer.h"
+#include <string>
 
-#define LOG(format, ...) wprintf (format L"\n", __VA_ARGS__)
-#define ERR(format, ...) LOG (L"Error: " format, __VA_ARGS__)
+#include "../shared/utils/cLog.h"
+#include "../shared/utils/cBipBuffer.h"
 //}}}
 #define DEFAULT_FILE L"out.wav"
 
 cBipBuffer bipBuffer;
 
 #define CHANNELS 2
-#define SAMPLE_RATE 44100
+#define SAMPLE_RATE 48000
 #define ENCODER_BITRATE 128000
 //{{{
 int writeData (void* file, uint8_t* data, int size) {
@@ -140,7 +140,7 @@ public:
     ~AudioClientStopOnExit() {
         HRESULT hr = m_p->Stop();
         if (FAILED(hr)) {
-            ERR(L"IAudioClient::Stop failed: hr = 0x%08x", hr);
+            cLog::log (LOGERROR, "IAudioClient::Stop failed: hr = 0x%08x", hr);
         }
     }
 
@@ -155,7 +155,7 @@ public:
 
   ~AvRevertMmThreadCharacteristicsOnExit() {
     if (!AvRevertMmThreadCharacteristics(m_hTask)) {
-      ERR(L"AvRevertMmThreadCharacteristics failed: last error is %d", GetLastError());
+      cLog::log (LOGERROR, "AvRevertMmThreadCharacteristics failed: last error is %d", GetLastError());
       }
     }
 
@@ -170,7 +170,7 @@ public:
 
   ~CancelWaitableTimerOnExit() {
     if (!CancelWaitableTimer(m_h)) {
-      ERR(L"CancelWaitableTimer failed: last error is %d", GetLastError());
+      cLog::log (LOGERROR, "CancelWaitableTimer failed: last error is %d", GetLastError());
       }
     }
 
@@ -185,7 +185,7 @@ public:
 
   ~CloseHandleOnExit() {
     if (!CloseHandle(m_h)) {
-      ERR(L"CloseHandle failed: last error is %d", GetLastError());
+      cLog::log (LOGERROR, "CloseHandle failed: last error is %d", GetLastError());
       }
     }
 
@@ -221,7 +221,7 @@ public:
     ~PropVariantClearOnExit() {
         HRESULT hr = PropVariantClear(m_p);
         if (FAILED(hr)) {
-            ERR(L"PropVariantClear failed: hr = 0x%08x", hr);
+            cLog::log (LOGERROR, "PropVariantClear failed: hr = 0x%08x", hr);
         }
     }
 
@@ -248,7 +248,7 @@ public:
   SetEventOnExit(HANDLE h) : m_h(h) {}
   ~SetEventOnExit() {
     if (!SetEvent(m_h)) {
-      ERR(L"SetEvent failed: last error is %d", GetLastError());
+      cLog::log (LOGERROR, "SetEvent failed: last error is %d", GetLastError());
       }
     }
 
@@ -264,7 +264,7 @@ public:
   ~WaitForSingleObjectOnExit() {
     DWORD dwWaitResult = WaitForSingleObject(m_h, INFINITE);
     if (WAIT_OBJECT_0 != dwWaitResult) {
-      ERR(L"WaitForSingleObject returned unexpected result 0x%08x, last error is %d", dwWaitResult, GetLastError());
+      cLog::log (LOGERROR, "WaitForSingleObject returned unexpected result 0x%08x, last error is %d", dwWaitResult, GetLastError());
       }
     }
 
@@ -274,159 +274,114 @@ private:
 //}}}
 
 //{{{
-class CPrefs {
-public:
-  CPrefs() : m_MMDevice(NULL), m_hFile(NULL), m_bInt16(true), m_pwfx(NULL), m_szFilename(NULL) {
+HRESULT list_devices() {
 
-    list_devices();
-    get_default_device (&m_MMDevice);
-    m_szFilename = DEFAULT_FILE;
-    open_file (m_szFilename, &m_hFile);
+  // get an enumerator
+  IMMDeviceEnumerator* pMMDeviceEnumerator;
+  HRESULT hr = CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                 __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator);
+  if (FAILED (hr)) {
+    //{{{
+    cLog::log (LOGERROR, "CoCreateInstance(IMMDeviceEnumerator) failed: hr = 0x%08x", hr);
+    return hr;
     }
+    //}}}
+  ReleaseOnExit releaseMMDeviceEnumerator (pMMDeviceEnumerator);
 
-  ~CPrefs() {
-    if (NULL != m_MMDevice)
-      m_MMDevice->Release();
-    if (NULL != m_hFile)
-       mmioClose(m_hFile, 0);
-    if (NULL != m_pwfx)
-      CoTaskMemFree(m_pwfx);
+  // get all the active render endpoints
+  IMMDeviceCollection* pMMDeviceCollection;
+  hr = pMMDeviceEnumerator->EnumAudioEndpoints (eRender, DEVICE_STATE_ACTIVE, &pMMDeviceCollection);
+  if (FAILED (hr)) {
+    //{{{
+    cLog::log (LOGERROR, "IMMDeviceEnumerator::EnumAudioEndpoints failed: hr = 0x%08x", hr);
+    return hr;
     }
+    //}}}
+  ReleaseOnExit releaseMMDeviceCollection (pMMDeviceCollection);
 
-  IMMDevice* m_MMDevice;
-  HMMIO m_hFile;
-  bool m_bInt16;
-  PWAVEFORMATEX m_pwfx;
-  LPCWSTR m_szFilename;
+  UINT count;
+  hr = pMMDeviceCollection->GetCount (&count);
+  if (FAILED(hr)) {
+    //{{{
+    cLog::log (LOGERROR, "IMMDeviceCollection::GetCount failed: hr = 0x%08x", hr);
+    return hr;
+    }
+    //}}}
+  cLog::log (LOGINFO, "Active render endpoints found: %u", count);
 
-private:
-  //{{{
-  HRESULT list_devices() {
-
-    // get an enumerator
-    IMMDeviceEnumerator *pMMDeviceEnumerator;
-    HRESULT hr = CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
-                                   __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator);
+  for (UINT i = 0; i < count; i++) {
+    // get the "n"th device
+    IMMDevice* pMMDevice;
+    hr = pMMDeviceCollection->Item (i, &pMMDevice);
     if (FAILED (hr)) {
       //{{{
-      ERR (L"CoCreateInstance(IMMDeviceEnumerator) failed: hr = 0x%08x", hr);
+      cLog::log (LOGERROR, "IMMDeviceCollection::Item failed: hr = 0x%08x", hr);
       return hr;
       }
       //}}}
-    ReleaseOnExit releaseMMDeviceEnumerator (pMMDeviceEnumerator);
+    ReleaseOnExit releaseMMDevice (pMMDevice);
 
-    // get all the active render endpoints
-    IMMDeviceCollection* pMMDeviceCollection;
-    hr = pMMDeviceEnumerator->EnumAudioEndpoints (eRender, DEVICE_STATE_ACTIVE, &pMMDeviceCollection);
-    if (FAILED (hr)) {
-      //{{{
-      ERR (L"IMMDeviceEnumerator::EnumAudioEndpoints failed: hr = 0x%08x", hr);
-      return hr;
-      }
-      //}}}
-    ReleaseOnExit releaseMMDeviceCollection (pMMDeviceCollection);
-
-    UINT count;
-    hr = pMMDeviceCollection->GetCount (&count);
+    // open the property store on that device
+    IPropertyStore* pPropertyStore;
+    hr = pMMDevice->OpenPropertyStore (STGM_READ, &pPropertyStore);
     if (FAILED(hr)) {
       //{{{
-      ERR (L"IMMDeviceCollection::GetCount failed: hr = 0x%08x", hr);
+      cLog::log (LOGERROR, "IMMDevice::OpenPropertyStore failed: hr = 0x%08x", hr);
       return hr;
       }
       //}}}
-    LOG (L"Active render endpoints found: %u", count);
+    ReleaseOnExit releasePropertyStore (pPropertyStore);
 
-    for (UINT i = 0; i < count; i++) {
-      // get the "n"th device
-      IMMDevice* pMMDevice;
-      hr = pMMDeviceCollection->Item (i, &pMMDevice);
-      if (FAILED (hr)) {
-        //{{{
-        ERR (L"IMMDeviceCollection::Item failed: hr = 0x%08x", hr);
-        return hr;
-        }
-        //}}}
-      ReleaseOnExit releaseMMDevice (pMMDevice);
-
-      // open the property store on that device
-      IPropertyStore* pPropertyStore;
-      hr = pMMDevice->OpenPropertyStore (STGM_READ, &pPropertyStore);
-      if (FAILED(hr)) {
-        //{{{
-        ERR(L"IMMDevice::OpenPropertyStore failed: hr = 0x%08x", hr);
-        return hr;
-        }
-        //}}}
-      ReleaseOnExit releasePropertyStore (pPropertyStore);
-
-      // get the long name property
-      PROPVARIANT pv; PropVariantInit (&pv);
-      hr = pPropertyStore->GetValue (PKEY_Device_FriendlyName, &pv);
-      if (FAILED (hr)) {
-        //{{{
-        ERR (L"IPropertyStore::GetValue failed: hr = 0x%08x", hr);
-        return hr;
-        }
-        //}}}
-
-      PropVariantClearOnExit clearPv (&pv);
-      if (VT_LPWSTR != pv.vt) {
-        //{{{
-        ERR (L"PKEY_Device_FriendlyName variant type is %u - expected VT_LPWSTR", pv.vt);
-        return E_UNEXPECTED;
-        }
-        //}}}
-
-      LOG (L"    %ls", pv.pwszVal);
-      }
-
-    return S_OK;
-    }
-  //}}}
-  //{{{
-  HRESULT get_default_device (IMMDevice** ppMMDevice) {
-
-    // activate a device enumerator
-    IMMDeviceEnumerator* pMMDeviceEnumerator;
-    HRESULT hr = CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL,
-                                   CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator);
-    if (FAILED (hr)) {
-     //{{{
-     ERR (L"CoCreateInstance (IMMDeviceEnumerator) failed: hr = 0x%08x", hr);
-     return hr;
-      }
-     //}}}
-    ReleaseOnExit releaseMMDeviceEnumerator (pMMDeviceEnumerator);
-
-    // get the default render endpoint
-    hr = pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eConsole, ppMMDevice);
+    // get the long name property
+    PROPVARIANT pv; PropVariantInit (&pv);
+    hr = pPropertyStore->GetValue (PKEY_Device_FriendlyName, &pv);
     if (FAILED (hr)) {
       //{{{
-      ERR (L"IMMDeviceEnumerator::GetDefaultAudioEndpoint failed: hr = 0x%08x", hr);
+      cLog::log (LOGERROR, "IPropertyStore::GetValue failed: hr = 0x%08x", hr);
       return hr;
       }
       //}}}
 
-    return S_OK;
-    }
-  //}}}
-  //{{{
-  HRESULT open_file (LPCWSTR szFileName, HMMIO* phFile) {
-
-    // some flags cause mmioOpen write to this buffer, but not any that we're using
-    MMIOINFO mi = {0};
-    *phFile = mmioOpen (const_cast<LPWSTR>(szFileName), &mi, MMIO_READWRITE | MMIO_CREATE);
-    if (NULL == *phFile) {
+    PropVariantClearOnExit clearPv (&pv);
+    if (VT_LPWSTR != pv.vt) {
       //{{{
-      ERR (L"mmioOpen(\"%ls\", ...) failed. wErrorRet == %u", szFileName, mi.wErrorRet);
-      return E_FAIL;
+      cLog::log (LOGERROR, "PKEY_Device_FriendlyName variant type is %u - expected VT_LPWSTR", pv.vt);
+      return E_UNEXPECTED;
       }
       //}}}
 
-    return S_OK;
+    //cLog::log (LOGINFO, pv.pwszVal);
     }
-  //}}}
-  };
+
+  return S_OK;
+  }
+//}}}
+//{{{
+HRESULT get_default_device (IMMDevice** ppMMDevice) {
+
+  // activate a device enumerator
+  IMMDeviceEnumerator* pMMDeviceEnumerator;
+  HRESULT hr = CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL,
+                                 CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator);
+  if (FAILED (hr)) {
+   //{{{
+   cLog::log (LOGERROR, "CoCreateInstance (IMMDeviceEnumerator) failed: hr = 0x%08x", hr);
+   return hr;
+    }
+   //}}}
+  ReleaseOnExit releaseMMDeviceEnumerator (pMMDeviceEnumerator);
+
+  // get the default render endpoint
+  hr = pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eConsole, ppMMDevice);
+  if (FAILED (hr)) {
+    //{{{
+    cLog::log (LOGERROR, "IMMDeviceEnumerator::GetDefaultAudioEndpoint failed: hr = 0x%08x", hr);
+    return hr;
+    }
+    //}}}
+
+  return S_OK;
+  }
 //}}}
 
 //{{{
@@ -439,7 +394,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   MMRESULT result = mmioCreateChunk(hFile, pckRIFF, MMIO_CREATERIFF);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioCreateChunk (\"RIFF/WAVE\") failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioCreateChunk (\"RIFF/WAVE\") failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
     //}}}
@@ -450,7 +405,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   result = mmioCreateChunk(hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
     //}}}
@@ -460,7 +415,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   LONG lBytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(const_cast<LPWAVEFORMATEX>(pwfx)), lBytesInWfx);
   if (lBytesWritten != lBytesInWfx) {
     //{{{
-    ERR (L"mmioWrite (fmt data) wrote %u bytes; expected %u bytes", lBytesWritten, lBytesInWfx);
+    cLog::log (LOGERROR, "mmioWrite (fmt data) wrote %u bytes; expected %u bytes", lBytesWritten, lBytesInWfx);
     return E_FAIL;
     }
     //}}}
@@ -469,7 +424,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   result = mmioAscend(hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioAscend (\"fmt \" failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioAscend (\"fmt \" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
     //}}}
@@ -479,7 +434,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   result = mmioCreateChunk(hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
     //}}}
@@ -490,7 +445,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   lBytesWritten = mmioWrite(hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
   if (lBytesWritten != sizeof(frames)) {
     //{{{
-    ERR (L"mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(frames));
+    cLog::log (LOGERROR, "mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(frames));
     return E_FAIL;
     }
     //}}}
@@ -499,7 +454,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   result = mmioAscend(hFile, &chunk, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioAscend (\"fact\" failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioAscend (\"fact\" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
     //}}}
@@ -509,7 +464,7 @@ HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, M
   result = mmioCreateChunk(hFile, pckData, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioCreateChunk(\"data\") failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioCreateChunk(\"data\") failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
     //}}}
@@ -524,13 +479,13 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
 
   result = mmioAscend (hFile, pckData, 0);
   if (MMSYSERR_NOERROR != result) {
-    ERR (L"mmioAscend(\"data\" failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioAscend(\"data\" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
 
   result = mmioAscend (hFile, pckRIFF, 0);
   if (MMSYSERR_NOERROR != result) {
-    ERR (L"mmioAscend(\"RIFF/WAVE\" failed: MMRESULT = 0x%08x", result);
+    cLog::log (LOGERROR, "mmioAscend(\"RIFF/WAVE\" failed: MMRESULT = 0x%08x", result);
     return E_FAIL;
     }
 
@@ -538,7 +493,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   hFile = NULL;
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioClose failed: MMSYSERR = %u", result);
+    cLog::log (LOGERROR, "mmioClose failed: MMSYSERR = %u", result);
     return -__LINE__;
     }
     //}}}
@@ -550,7 +505,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   hFile = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
   if (NULL == hFile) {
     //{{{
-    ERR (L"mmioOpen failed");
+    cLog::log (LOGERROR, "mmioOpen failed");
     return -__LINE__;
     }
     //}}}
@@ -561,7 +516,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   result = mmioDescend (hFile, &ckRIFF, NULL, MMIO_FINDRIFF);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
+    cLog::log (LOGERROR, "mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
     return -__LINE__;
     }
     //}}}
@@ -572,7 +527,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   result = mmioDescend (hFile, &ckFact, &ckRIFF, MMIO_FINDCHUNK);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
+    cLog::log (LOGERROR, "mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
     return -__LINE__;
     }
     //}}}
@@ -581,7 +536,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   LONG bytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
   if (bytesWritten != sizeof (frames)) {
     //{{{
-    ERR (L"Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
+    cLog::log (LOGERROR, "Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
     return -__LINE__;
     }
     //}}}
@@ -590,7 +545,7 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
   result = mmioAscend (hFile, &ckFact, 0);
   if (MMSYSERR_NOERROR != result) {
     //{{{
-    ERR (L"mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
+    cLog::log (LOGERROR, "mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
     return -__LINE__;
     }
     //}}}
@@ -602,23 +557,22 @@ HRESULT finishWaveFile (HMMIO hFile, MMCKINFO* pckRIFF, MMCKINFO* pckData, int f
 //{{{
 struct sCaptureContext {
   IMMDevice* MMDevice;
-  bool bInt16;
-
-  HMMIO file;
   HANDLE stopEvent;
-  UINT32 frames;
-
-  HRESULT hr;
   };
 //}}}
 //{{{
-void capture (sCaptureContext* context) {
+DWORD WINAPI captureThread (LPVOID param) {
+
+  sCaptureContext* context = (sCaptureContext*)param;
+
+  CoInitialize (NULL);
+  CoUninitializeOnExit cuoe;
 
   //{{{  activate an IAudioClient
   IAudioClient* audioClient;
   if (FAILED (context->MMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&audioClient))) {
-    ERR (L"IMMDevice::Activate (IAudioClient) failed");
-    return;
+    cLog::log (LOGERROR, "IMMDevice::Activate (IAudioClient) failed");
+    return 0;
     }
 
   ReleaseOnExit releaseAudioClient (audioClient);
@@ -626,68 +580,67 @@ void capture (sCaptureContext* context) {
   //{{{  get the default device periodicity
   REFERENCE_TIME hnsDefaultDevicePeriod;
   if (FAILED (audioClient->GetDevicePeriod (&hnsDefaultDevicePeriod, NULL))) {
-    ERR (L"IAudioClient::GetDevicePeriod failed");
-    return;
+    cLog::log (LOGERROR, "IAudioClient::GetDevicePeriod failed");
+    return 0;
     }
   //}}}
   //{{{  get the default device format
   WAVEFORMATEX* waveFormatEx;
   if (FAILED (audioClient->GetMixFormat (&waveFormatEx))) {
-    ERR (L"IAudioClient::GetMixFormat failed");
-    return;
+    cLog::log (LOGERROR, "IAudioClient::GetMixFormat failed");
+    return 0;
     }
 
   CoTaskMemFreeOnExit freeMixFormat (waveFormatEx);
   //}}}
-  if (context->bInt16) {
-    //{{{  coerce int16 waveFormat, in-place not changing size of format, engine auto-convert float to int
-    switch (waveFormatEx->wFormatTag) {
-      case WAVE_FORMAT_IEEE_FLOAT:
-        printf ("WAVE_FORMAT_IEEE_FLOAT\n");
+  //{{{  coerce int16 waveFormat, in-place not changing size of format, engine auto-convert float to int
+  switch (waveFormatEx->wFormatTag) {
+    case WAVE_FORMAT_IEEE_FLOAT:
+      printf ("WAVE_FORMAT_IEEE_FLOAT\n");
 
-        waveFormatEx->wFormatTag = WAVE_FORMAT_PCM;
+      waveFormatEx->wFormatTag = WAVE_FORMAT_PCM;
+      waveFormatEx->wBitsPerSample = 16;
+      waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
+      waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
+      break;
+
+    case WAVE_FORMAT_EXTENSIBLE: {
+      printf ("WAVE_FORMAT_EXTENSIBLE\n");
+      PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
+      if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
+        printf ("- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT\n");
+        pEx->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+        pEx->Samples.wValidBitsPerSample = 16;
         waveFormatEx->wBitsPerSample = 16;
         waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
         waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
-        break;
-
-      case WAVE_FORMAT_EXTENSIBLE: {
-        printf ("WAVE_FORMAT_EXTENSIBLE\n");
-        PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
-        if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
-          printf ("- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT\n");
-          pEx->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
-          pEx->Samples.wValidBitsPerSample = 16;
-          waveFormatEx->wBitsPerSample = 16;
-          waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
-          waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
-          }
-        else {
-          //{{{
-          ERR (L"%s", L"Don't know how to coerce mix format to int-16");
-          return;
-          }
-          //}}}
-         }
-        break;
-
-      default:
-        ERR (L"Don't know how to coerce WAVEFORMATEX with wFormatTag = 0x%08x to int-16", waveFormatEx->wFormatTag);
-        return;
+        }
+      else {
+        cLog::log (LOGERROR, "%s", L"Don't know how to coerce mix format to int-16");
+        return 0;
+        }
       }
+      break;
+
+    default:
+      cLog::log (LOGERROR, "Don't know how to coerce WAVEFORMATEX with wFormatTag = 0x%08x to int-16", waveFormatEx->wFormatTag);
+      return 0;
     }
-    //}}}
+  //}}}
+
+  MMIOINFO mi = { 0 };
+  HMMIO file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE | MMIO_CREATE);
 
   MMCKINFO ckRIFF = {0};
   MMCKINFO ckData = {0};
-  if (FAILED (writeWaveHeader (context->file, waveFormatEx, &ckRIFF, &ckData)))
-    return;
+  if (FAILED (writeWaveHeader (file, waveFormatEx, &ckRIFF, &ckData)))
+    return 0;
 
   //{{{  create a periodic waitable timer
   HANDLE wakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
   if (NULL == wakeUp) {
-    ERR (L"CreateWaitableTimer failed: last error = %u", GetLastError());
-    return;
+    cLog::log (LOGERROR, "CreateWaitableTimer failed: last error = %u", GetLastError());
+    return 0;
     }
 
   CloseHandleOnExit closeWakeUp (wakeUp);
@@ -696,15 +649,15 @@ void capture (sCaptureContext* context) {
   // note that AUDCLNT_STREAMFLAGS_LOOPBACK and AUDCLNT_STREAMFLAGS_EVENTCALLBACK do not work together...
   // the "data ready" event never gets set so we're going to do a timer-driven loop
   if (FAILED (audioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, waveFormatEx, 0))) {
-    ERR (L"IAudioClient::Initialize failed");
-    return;
+    cLog::log (LOGERROR, "IAudioClient::Initialize failed");
+    return 0;
     }
   //}}}
   //{{{  activate an IAudioCaptureClient
   IAudioCaptureClient* audioCaptureClient;
   if (FAILED (audioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&audioCaptureClient))) {
-    ERR (L"IAudioClient::GetService (IAudioCaptureClient) failed");
-    return;
+    cLog::log (LOGERROR, "IAudioClient::GetService (IAudioCaptureClient) failed");
+    return 0;
     }
 
   ReleaseOnExit releaseAudioCaptureClient (audioCaptureClient);
@@ -713,8 +666,8 @@ void capture (sCaptureContext* context) {
   DWORD nTaskIndex = 0;
   HANDLE hTask = AvSetMmThreadCharacteristics (L"Audio", &nTaskIndex);
   if (NULL == hTask) {
-    ERR (L"AvSetMmThreadCharacteristics failed: last error = %u", GetLastError());
-    return;
+    cLog::log (LOGERROR, "AvSetMmThreadCharacteristics failed: last error = %u", GetLastError());
+    return 0;
     }
 
   AvRevertMmThreadCharacteristicsOnExit unregisterMmcss (hTask);
@@ -725,23 +678,23 @@ void capture (sCaptureContext* context) {
   LONG lTimeBetweenFires = (LONG)hnsDefaultDevicePeriod / 2 / (10 * 1000); // convert to milliseconds
 
   if (!SetWaitableTimer (wakeUp, &liFirstFire, lTimeBetweenFires, NULL, NULL, FALSE)) {
-    ERR (L"SetWaitableTimer failed: last error = %u", GetLastError());
-    return;
+    cLog::log (LOGERROR, "SetWaitableTimer failed: last error = %u", GetLastError());
+    return 0;
     }
 
   CancelWaitableTimerOnExit cancelWakeUp (wakeUp);
   //}}}
   //{{{  IAudioClient::Start
   if (FAILED (audioClient->Start())) {
-    ERR (L"IAudioClient::Start failed");
-    return;
+    cLog::log (LOGERROR, "IAudioClient::Start failed");
+    return 0;
     }
 
   AudioClientStopOnExit stopAudioClient (audioClient);
   //}}}
 
   // loopback capture loop
-  context->frames = 0;
+  int frames = 0;
   HANDLE waitArray[2] = { context->stopEvent, wakeUp };
   bool done = false;
   while (!done) {
@@ -753,33 +706,31 @@ void capture (sCaptureContext* context) {
       DWORD dwFlags;
       if (FAILED (audioCaptureClient->GetBuffer (&pData, &numFramesToRead, &dwFlags, NULL, NULL))) {
         //{{{
-        ERR (L"IAudioCaptureClient::GetBuffer failed");
-        return;
+        cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer failed");
+        return 0;
         }
         //}}}
-      if ((context->frames == 0) && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
+      if ((frames == 0) && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
         //{{{
-        LOG (L"%s", L"glitch on first packet");
+        cLog::log (LOGINFO, "glitch on first packet");
         }
         //}}}
       else if (dwFlags != 0) {
         //{{{
-        LOG (L"IAudioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
-        return;
+        cLog::log (LOGINFO, "IAudioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
+        return 0;
         }
         //}}}
       if (numFramesToRead == 0) {
         //{{{
-        ERR (L"IAudioCaptureClient::GetBuffer read 0 frames");
-        return;
+        cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer read 0 frames");
+        return 0;
         }
         //}}}
 
       //printf ("numFrames %d %d %d bytes:%d\n",
-      //  context->frames, numFramesToRead, waveFormatEx->nBlockAlign, numFramesToRead * waveFormatEx->nBlockAlign);
 
       LONG bytesToWrite = numFramesToRead * waveFormatEx->nBlockAlign;
-
       int bytesAllocated = 0;
       uint8_t* ptr = bipBuffer.reserve (bytesToWrite, bytesAllocated);
       if (ptr && (bytesAllocated == bytesToWrite)) {
@@ -787,59 +738,43 @@ void capture (sCaptureContext* context) {
         bipBuffer.commit (bytesAllocated);
         }
 
-      LONG bytesWritten = mmioWrite (context->file, reinterpret_cast<PCHAR>(pData), bytesToWrite);
+      LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(pData), bytesToWrite);
       if (bytesWritten != bytesToWrite) {
         //{{{
-        ERR (L"mmioWrite wrote %u bytes expected %u bytes", bytesWritten, bytesToWrite);
-        return;
+        cLog::log (LOGERROR, "mmioWrite wrote %u bytes expected %u bytes", bytesWritten, bytesToWrite);
+        return 0;
         }
         //}}}
       if (FAILED (audioCaptureClient->ReleaseBuffer (numFramesToRead))) {
         //{{{
-        ERR (L"IAudioCaptureClient::ReleaseBuffer failed");
-        return;
+        cLog::log (LOGERROR, "IAudioCaptureClient::ReleaseBuffer failed");
+        return 0;
         }
         //}}}
 
-
-
-
-
-      context->frames += numFramesToRead;
+      frames += numFramesToRead;
       audioCaptureClient->GetNextPacketSize (&packetSize);
       }
 
     DWORD dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE);
     if (WAIT_OBJECT_0 == dwWaitResult) {
       //{{{
-      LOG (L"Received stop event");
+      cLog::log (LOGINFO, "Received stop event");
       done = true;
       }
       //}}}
     else if (WAIT_OBJECT_0 + 1 != dwWaitResult) {
       //{{{
-      ERR (L"Unexpected WaitForMultipleObjects return value %u", dwWaitResult);
-      return;
+      cLog::log (LOGERROR, "Unexpected WaitForMultipleObjects return value %u", dwWaitResult);
+      return 0;
       }
       //}}}
     }
 
-  finishWaveFile (context->file, &ckData, &ckRIFF, context->frames);
-  }
-//}}}
-//{{{
-DWORD WINAPI captureThread (LPVOID context) {
+  finishWaveFile (file, &ckData, &ckRIFF, frames);
 
-  sCaptureContext* captureContext = (sCaptureContext*)context;
-
-  captureContext->hr = CoInitialize (NULL);
-  if (FAILED (captureContext->hr)) {
-    ERR (L"CoInitialize failed: hr = 0x%08x", captureContext->hr);
-    return 0;
-    }
-  CoUninitializeOnExit cuoe;
-
-  capture (captureContext);
+  if (file)
+    mmioClose (file, 0);
 
   return 0;
   }
@@ -905,7 +840,7 @@ DWORD WINAPI readThread (LPVOID context) {
     int len = encoderContext->frame_size;
     auto ptr = (int16_t*)bipBuffer.getContiguousBlock (len);
     if (len >= encoderContext->frame_size) {
-      printf ("read block %d\n", len);
+      cLog::log (LOGINFO, "read block %d", len);
       auto samples0 = (float*)frame->data[0];
       auto samples1 = (float*)frame->data[1];
       for (auto j = 0; j < encoderContext->frame_size; j++) {
@@ -944,50 +879,35 @@ DWORD WINAPI readThread (LPVOID context) {
 //}}}
 
 //{{{
-int _cdecl wmain (int argc, LPCWSTR argv[]) {
+int main() {
 
-  HRESULT hr = CoInitialize (NULL);
-  if (FAILED(hr)) {
-    //{{{
-    ERR(L"CoInitialize failed: hr = 0x%08x", hr);
-    return -__LINE__;
-    }
-    //}}}
+  cLog::init (LOGINFO, true);
+  cLog::log (LOGNOTICE, "capture");
 
+   CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
-
-  int a = argc;
-  LPCWSTR nn = argv[0];
-  printf ("%d %ls", a, nn);
 
   bipBuffer.allocateBuffer (1024 * 32);
 
-  // parse command line
-  CPrefs prefs;
+  sCaptureContext captureContext;
+
+  list_devices();
+  get_default_device (&captureContext.MMDevice);
 
   // create a "stop capturing now" event
-  HANDLE stopEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
-  if (NULL == stopEvent) {
+  captureContext.stopEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
+  if (NULL == captureContext.stopEvent) {
     //{{{
-    ERR (L"CreateEvent failed: last error is %u", GetLastError());
+    cLog::log (LOGERROR, "CreateEvent failed: last error is %u", GetLastError());
     return -__LINE__;
     }
     //}}}
-  CloseHandleOnExit closeStopEvent (stopEvent);
-
-  // create arguments for loopback capture thread
-  sCaptureContext captureContext;
-  captureContext.MMDevice = prefs.m_MMDevice;
-  captureContext.bInt16 = prefs.m_bInt16;
-  captureContext.file = prefs.m_hFile;
-  captureContext.stopEvent = stopEvent;
-  captureContext.frames = 0;
-  captureContext.hr = E_UNEXPECTED; // thread will overwrite this
+  CloseHandleOnExit closeStopEvent (captureContext.stopEvent);
 
   HANDLE hReadThread = CreateThread (NULL, 0, readThread, &captureContext, 0, NULL );
   if (hReadThread == NULL) {
     //{{{
-    ERR (L"CreateThread failed: last error is %u", GetLastError());
+    cLog::log (LOGERROR, "CreateThread failed: last error is %u", GetLastError());
     return -__LINE__;
     }
     //}}}
@@ -996,7 +916,7 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &captureContext, 0, NULL );
   if (hThread == NULL) {
     //{{{
-    ERR (L"CreateThread failed: last error is %u", GetLastError());
+    cLog::log (LOGERROR, "CreateThread failed: last error is %u", GetLastError());
     return -__LINE__;
     }
     //}}}
@@ -1004,11 +924,11 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
 
   // at this point capture is running .wait for the user to press a key or for capture to error out
   WaitForSingleObjectOnExit waitForThread (hThread);
-  SetEventOnExit setStopEvent (stopEvent);
+  SetEventOnExit setStopEvent (captureContext.stopEvent);
   HANDLE hStdIn = GetStdHandle (STD_INPUT_HANDLE);
   if (INVALID_HANDLE_VALUE == hStdIn) {
     //{{{
-    ERR (L"GetStdHandle returned INVALID_HANDLE_VALUE: last error is %u", GetLastError());
+    cLog::log (LOGERROR, "GetStdHandle returned INVALID_HANDLE_VALUE: last error is %u", GetLastError());
     return -__LINE__;
     }
     //}}}
@@ -1019,7 +939,7 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
     auto dwWaitResult = WaitForMultipleObjects (2, rhHandles, FALSE, INFINITE);
     switch (dwWaitResult) {
       case WAIT_OBJECT_0: // hThread
-        ERR (L"%s", L"The thread terminated early - something bad happened");
+        cLog::log (LOGERROR, "%s", L"The thread terminated early - something bad happened");
         bKeepWaiting = false;
         break;
 
@@ -1029,7 +949,7 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
         DWORD nEvents;
         if (!ReadConsoleInput (hStdIn, rInput, ARRAYSIZE(rInput), &nEvents)) {
           //{{{
-          ERR (L"ReadConsoleInput failed: last error is %u", GetLastError());
+          cLog::log (LOGERROR, "ReadConsoleInput failed: last error is %u", GetLastError());
           bKeepWaiting = false;
           }
           //}}}
@@ -1038,7 +958,7 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
             if (KEY_EVENT == rInput[i].EventType &&
                 VK_RETURN == rInput[i].Event.KeyEvent.wVirtualKeyCode && !rInput[i].Event.KeyEvent.bKeyDown) {
               //{{{
-              LOG (L"%s", L"Stopping capture...");
+              cLog::log (LOGINFO, "Stopping capture...");
               bKeepWaiting = false;
               break;
               }
@@ -1049,11 +969,14 @@ int _cdecl wmain (int argc, LPCWSTR argv[]) {
           break;
 
       default:
-        ERR (L"WaitForMultipleObjects returned unexpected value 0x%08x", dwWaitResult);
+        cLog::log (LOGERROR, "WaitForMultipleObjects returned unexpected value 0x%08x", dwWaitResult);
         bKeepWaiting = false;
         break;
       }
     }
+
+  if (NULL != captureContext.MMDevice)
+    captureContext.MMDevice->Release();
 
   // let prefs' destructor call mmioClose
   return 0;
