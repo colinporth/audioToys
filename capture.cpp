@@ -29,12 +29,11 @@ extern "C" {
 #include "../shared/utils/cLog.h"
 #include "../shared/utils/cBipBuffer.h"
 //}}}
-#define DEFAULT_FILE L"out.wav"
-
 #define CHANNELS 2
 #define SAMPLE_RATE 48000
 #define ENCODER_BITRATE 128000
 
+#define DEFAULT_FILE L"out.wav"
 //{{{
 class cWaveFile {
 public:
@@ -49,6 +48,7 @@ public:
     }
   //}}}
 
+  bool getOk() { return mOk; }
   //{{{
   void write (void* data, LONG bytesToWrite) {
 
@@ -151,6 +151,7 @@ private:
       //}}}
 
     mBlockAlign = waveFormatEx->nBlockAlign;
+    mOk = true;
     }
   //}}}
   //{{{
@@ -242,8 +243,10 @@ private:
   MMCKINFO ckRIFF = { 0 };
   MMCKINFO ckData = { 0 };
 
-  int framesWritten = 0;
+  bool mOk = false;
+
   int mBlockAlign = 0;
+  int framesWritten = 0;
   };
 //}}}
 
@@ -537,7 +540,7 @@ int main() {
             done = true;
             break;
             }
-      }     
+      }
     else
       Sleep (1);
     }
