@@ -33,13 +33,15 @@ extern "C" {
 #define SAMPLE_RATE 48000
 #define ENCODER_BITRATE 128000
 
-#define DEFAULT_FILE L"out.wav"
 //{{{
 class cWaveFile {
 public:
   //{{{
-  cWaveFile (WAVEFORMATEX* waveFormatEx) {
-    open (waveFormatEx);
+  cWaveFile (char* filename, WAVEFORMATEX* waveFormatEx) {
+
+    mFilename = (char*)malloc (strlen (filename));
+    strcpy (mFilename, filename);
+    open (mFilename, waveFormatEx);
     }
   //}}}
   //{{{
@@ -63,10 +65,10 @@ public:
 
 private:
   //{{{
-  void open (WAVEFORMATEX* waveFormatEx) {
+  void open (char* filename, WAVEFORMATEX* waveFormatEx) {
 
     MMIOINFO mi = { 0 };
-    file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE | MMIO_CREATE);
+    file = mmioOpen (filename, &mi, MMIO_READWRITE | MMIO_CREATE);
 
     // make a RIFF/WAVE chunk
     ckRIFF.ckid = MAKEFOURCC ('R', 'I', 'F', 'F');
@@ -186,7 +188,7 @@ private:
 
     // reopen the file in read/write mode
     MMIOINFO mi = { 0 };
-    file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
+    file = mmioOpen (mFilename, &mi, MMIO_READWRITE);
     if (NULL == file) {
       //{{{
       cLog::log (LOGERROR, "mmioOpen failed");
@@ -237,7 +239,7 @@ private:
     mmioClose (file, 0);
     }
   //}}}
-
+  char* mFilename;
   HMMIO file;
 
   MMCKINFO ckRIFF = { 0 };
@@ -344,7 +346,7 @@ DWORD WINAPI captureThread (LPVOID param) {
   CoInitialize (NULL);
   //{{{  register task with MMCSS
   DWORD nTaskIndex = 0;
-  HANDLE hTask = AvSetMmThreadCharacteristics (L"Audio", &nTaskIndex);
+  HANDLE hTask = AvSetMmThreadCharacteristics ("Audio", &nTaskIndex);
 
   if (hTask == NULL) {
     cLog::log (LOGERROR, "AvSetMmThreadCharacteristics failed: last error = %u", GetLastError());
@@ -450,7 +452,7 @@ int main() {
   CoInitialize (NULL);
 
   cCapture capture;
-  cWaveFile waveFile (capture.mWaveFormatEx);
+  cWaveFile waveFile ("out.wav", capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
