@@ -158,24 +158,24 @@ int init_fifo (AVAudioFifo** fifo, AVCodecContext* output_codec_context) {
   }
 //}}}
 //{{{
-int init_converted_samples (uint8_t*** converted_input_samples, AVCodecContext* output_codec_context, int frame_size)
+int init_converted_samples (uint8_t*** convertedSamples, AVCodecContext* output_codec_context, int frame_size)
 {
   int error;
 
   /* Allocate as many pointers as there are audio channels.
    * Each pointer will later point to the audio samples of the corresponding channels (although it may be NULL for interleaved formats).
    */
-  if (!(*converted_input_samples = (uint8_t**)calloc (output_codec_context->channels, sizeof(**converted_input_samples)))) {
+  if (!(*convertedSamples = (uint8_t**)calloc (output_codec_context->channels, sizeof(**convertedSamples)))) {
     fprintf(stderr, "Could not allocate converted input sample pointers\n");
     return AVERROR(ENOMEM);
     }
 
   /* Allocate memory for the samples of all channels in one consecutive block for convenience. */
-  if ((error = av_samples_alloc (*converted_input_samples, NULL, output_codec_context->channels,
+  if ((error = av_samples_alloc (*convertedSamples, NULL, output_codec_context->channels,
                                  frame_size, output_codec_context->sample_fmt, 0)) < 0) {
     fprintf (stderr, "Could not allocate converted input samples\n" );
-    av_freep (&(*converted_input_samples)[0]);
-    free (*converted_input_samples);
+    av_freep (&(*convertedSamples)[0]);
+    free (*convertedSamples);
     return error;
     }
 
@@ -390,10 +390,12 @@ int write_output_file_trailer (AVFormatContext* output_format_context) {
 //}}}
 
 //{{{
-int convert_samples (const uint8_t** input_data, uint8_t** converted_data, const int frame_size, SwrContext* resample_context) {
+int convert_samples (const uint8_t** input_data, const int input_frame_size,
+                     uint8_t** converted_data, const int output_frame_size,
+                     SwrContext* resample_context) {
 
   int error;
-  if ((error = swr_convert (resample_context, converted_data, frame_size, input_data, frame_size)) < 0) {
+  if ((error = swr_convert (resample_context, converted_data, output_frame_size, input_data, input_frame_size)) < 0) {
     fprintf (stderr, "Could not convert input samples\n");
     return error;
     }
@@ -402,34 +404,16 @@ int convert_samples (const uint8_t** input_data, uint8_t** converted_data, const
   }
 //}}}
 //{{{
-int add_samples_to_fifo (AVAudioFifo* fifo, uint8_t** converted_input_samples, const int frame_size) {
-
-  /* Make the FIFO as large as it needs to be to hold both, * the old and the new samples. */
-  int error;
-  if ((error = av_audio_fifo_realloc (fifo, av_audio_fifo_size(fifo) + frame_size)) < 0) {
-    fprintf(stderr, "Could not reallocate FIFO\n");
-    return error;
-    }
-
-  /* Store the new samples in the FIFO buffer. */
-  if (av_audio_fifo_write (fifo, (void **)converted_input_samples, frame_size) < frame_size) {
-    fprintf(stderr, "Could not write data to FIFO\n");
-    return AVERROR_EXIT;
-    }
-
-  return 0;
-  }
-//}}}
-//{{{
 int read_decode_convert_and_store (AVAudioFifo* fifo,
-                                   AVFormatContext *input_format_context, AVCodecContext *input_codec_context,
-                                   AVCodecContext *output_codec_context, SwrContext *resampler_context,
-                                   int *finished) {
+                                   AVFormatContext* input_format_context, AVCodecContext* input_codec_context,
+                                   AVCodecContext* output_codec_context, 
+                                   SwrContext* resampler_context,
+                                   int* finished) {
 
   /* Temporary storage for the converted input samples. */
   int ret = AVERROR_EXIT;
 
-  uint8_t** converted_input_samples = NULL;
+  uint8_t** convertedSamples = NULL;
 
   /* Initialize temporary storage for one input frame. */
   AVFrame* input_frame = NULL;
@@ -452,27 +436,39 @@ int read_decode_convert_and_store (AVAudioFifo* fifo,
   /* If there is decoded data, convert and store it. */
   if (data_present) {
     /* Initialize the temporary storage for the converted input samples. */
-    if (init_converted_samples (&converted_input_samples, output_codec_context, input_frame->nb_samples))
+    const int converted_frame_size = input_frame->nb_samples;
+    if (init_converted_samples (&convertedSamples, output_codec_context, converted_frame_size))
       goto cleanup;
 
     /* Convert the input samples to the desired output sample format.
-     * This requires a temporary storage provided by converted_input_samples. */
-    if (convert_samples ((const uint8_t**)input_frame->extended_data, converted_input_samples,
-                         input_frame->nb_samples, resampler_context))
+     * This requires a temporary storage provided by convertedSamples. */
+    /* Add the converted input samples to the FIFO buffer for later processing. */
+    if (convert_samples ((const uint8_t**)input_frame->extended_data, input_frame->nb_samples,
+                         convertedSamples, converted_frame_size,
+                         resampler_context))
       goto cleanup;
 
-    /* Add the converted input samples to the FIFO buffer for later processing. */
-    if (add_samples_to_fifo (fifo, converted_input_samples, input_frame->nb_samples))
+
+    /* Make the FIFO as large as it needs to be to hold both, * the old and the new samples. */
+    int error;
+    if ((error = av_audio_fifo_realloc (fifo, av_audio_fifo_size (fifo) + converted_frame_size)) < 0) {
+      fprintf (stderr, "Could not reallocate FIFO\n");
       goto cleanup;
-    ret = 0;
+      }
+
+    /* Store the new samples in the FIFO buffer. */
+    if (av_audio_fifo_write (fifo, (void**)convertedSamples, converted_frame_size) < converted_frame_size) {
+      fprintf (stderr, "Could not write data to FIFO\n");
+      goto cleanup;
+      }
     }
 
   ret = 0;
 
 cleanup:
-  if (converted_input_samples) {
-    av_freep (&converted_input_samples[0]);
-    free (converted_input_samples);
+  if (convertedSamples) {
+    av_freep (&convertedSamples[0]);
+    free (convertedSamples);
     }
 
   av_frame_free (&input_frame);
