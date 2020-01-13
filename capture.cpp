@@ -239,6 +239,7 @@ private:
     mmioClose (file, 0);
     }
   //}}}
+
   char* mFilename;
   HMMIO file;
 
