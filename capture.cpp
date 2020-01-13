@@ -52,9 +52,14 @@ public:
   //}}}
 
   //{{{
-  LONG write (BYTE* data, int numFrames, LONG bytesToWrite) {
-    frames += numFrames;
-    return mmioWrite (file, reinterpret_cast<PCHAR>(data), bytesToWrite);
+  void write (void* data, int frames, LONG bytesToWrite) {
+
+    auto bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(data), bytesToWrite);
+
+    if (bytesWritten == bytesToWrite)
+      framesWritten += frames;
+    else
+      cLog::log (LOGERROR, "mmioWrite failed - wrote only %u of %u bytes", bytesWritten, bytesToWrite);
     }
   //}}}
 
@@ -119,11 +124,11 @@ private:
 
     // write (DWORD)0 to it
     // this is cleaned up later
-    frames = 0;
-    lBytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
-    if (lBytesWritten != sizeof (frames)) {
+    framesWritten = 0;
+    lBytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&framesWritten), sizeof(framesWritten));
+    if (lBytesWritten != sizeof (framesWritten)) {
       //{{{
-      cLog::log (LOGERROR, "mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(frames));
+      cLog::log (LOGERROR, "mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(framesWritten));
       return;
       }
       //}}}
@@ -210,11 +215,11 @@ private:
       }
       //}}}
 
-    // write frames to the fact chunk
-    LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
-    if (bytesWritten != sizeof (frames)) {
+    // write framesWritten to the fact chunk
+    LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&framesWritten), sizeof(framesWritten));
+    if (bytesWritten != sizeof (framesWritten)) {
       //{{{
-      cLog::log (LOGERROR, "Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
+      cLog::log (LOGERROR, "Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(framesWritten));
       return;
       }
       //}}}
@@ -234,13 +239,12 @@ private:
 
   HMMIO file;
 
-  MMCKINFO ckRIFF = {0};
-  MMCKINFO ckData = {0};
+  MMCKINFO ckRIFF = { 0 };
+  MMCKINFO ckData = { 0 };
 
-  int frames = 0;
+  int framesWritten = 0;
   };
 //}}}
-
 
 //{{{
 class AudioClientStopOnExit {
@@ -496,7 +500,7 @@ HRESULT get_default_device (IMMDevice** ppMMDevice) {
 //{{{
 struct sCaptureContext {
   IMMDevice* MMDevice;
-  HANDLE stopEvent;
+  WAVEFORMATEX* waveFormatEx;
   };
 //}}}
 //{{{
@@ -510,6 +514,7 @@ DWORD WINAPI captureThread (LPVOID param) {
 
   //{{{  activate an IAudioClient
   IAudioClient* audioClient;
+
   if (FAILED (context->MMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&audioClient))) {
     cLog::log (LOGERROR, "IMMDevice::Activate (IAudioClient) failed");
     return 0;
@@ -519,19 +524,19 @@ DWORD WINAPI captureThread (LPVOID param) {
   //}}}
   //{{{  get the default device periodicity
   REFERENCE_TIME hnsDefaultDevicePeriod;
+
   if (FAILED (audioClient->GetDevicePeriod (&hnsDefaultDevicePeriod, NULL))) {
     cLog::log (LOGERROR, "IAudioClient::GetDevicePeriod failed");
     return 0;
     }
   //}}}
   //{{{  get the default device format
-  WAVEFORMATEX* waveFormatEx;
-  if (FAILED (audioClient->GetMixFormat (&waveFormatEx))) {
+  if (FAILED (audioClient->GetMixFormat (&context->waveFormatEx))) {
     cLog::log (LOGERROR, "IAudioClient::GetMixFormat failed");
     return 0;
     }
 
-  CoTaskMemFreeOnExit freeMixFormat (waveFormatEx);
+  CoTaskMemFreeOnExit freeMixFormat (context->waveFormatEx);
   //}}}
   //{{{  engine auto-converts float to int
   //if (waveFormatEx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
@@ -550,8 +555,6 @@ DWORD WINAPI captureThread (LPVOID param) {
     //}
   //}}}
 
-  cWaveFile waveFile (waveFormatEx);
-
   //{{{  create a periodic waitable timer
   HANDLE wakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
   if (NULL == wakeUp) {
@@ -564,7 +567,7 @@ DWORD WINAPI captureThread (LPVOID param) {
   //{{{  IAudioClient::Initialize
   // note that AUDCLNT_STREAMFLAGS_LOOPBACK and AUDCLNT_STREAMFLAGS_EVENTCALLBACK do not work together...
   // the "data ready" event never gets set so we're going to do a timer-driven loop
-  if (FAILED (audioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, waveFormatEx, 0))) {
+  if (FAILED (audioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, context->waveFormatEx, 0))) {
     cLog::log (LOGERROR, "IAudioClient::Initialize failed");
     return 0;
     }
@@ -609,8 +612,6 @@ DWORD WINAPI captureThread (LPVOID param) {
   AudioClientStopOnExit stopAudioClient (audioClient);
   //}}}
 
-  // loopback capture loop
-  HANDLE waitArray[2] = { context->stopEvent, wakeUp };
   bool done = false;
   while (!done) {
     UINT32 packetSize;
@@ -626,18 +627,18 @@ DWORD WINAPI captureThread (LPVOID param) {
         }
         //}}}
       if (AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags)
-        cLog::log (LOGINFO, "DISCONTINUITY");
+        cLog::log (LOGINFO, "audioCaptureClient::GetBuffer discontinuity");
       else if (dwFlags != 0)
-        cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
+        cLog::log (LOGINFO, "audioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
       if (numFramesRead == 0) {
         //{{{
-        cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer read 0 frames");
+        cLog::log (LOGERROR, "audioCaptureClient::GetBuffer read 0 frames");
         return 0;
         }
         //}}}
 
-      cLog::log (LOGINFO2, "captured frames %d bytes:%d", numFramesRead, numFramesRead * waveFormatEx->nBlockAlign);
-      LONG bytesToWrite = numFramesRead * waveFormatEx->nBlockAlign;
+      cLog::log (LOGINFO2, "captured frames %d bytes:%d", numFramesRead, numFramesRead * context->waveFormatEx->nBlockAlign);
+      LONG bytesToWrite = numFramesRead * context->waveFormatEx->nBlockAlign;
       int bytesAllocated = 0;
       uint8_t* ptr = bipBuffer.reserve (bytesToWrite, bytesAllocated);
       if (ptr && (bytesAllocated == bytesToWrite)) {
@@ -645,17 +646,9 @@ DWORD WINAPI captureThread (LPVOID param) {
         bipBuffer.commit (bytesAllocated);
         }
 
-      LONG bytesWritten =  waveFile.write (data, numFramesRead, bytesToWrite);
-
-      if (bytesWritten != bytesToWrite) {
-        //{{{
-        cLog::log (LOGERROR, "mmioWrite wrote %u bytes expected %u bytes", bytesWritten, bytesToWrite);
-        return 0;
-        }
-        //}}}
       if (FAILED (audioCaptureClient->ReleaseBuffer (numFramesRead))) {
         //{{{
-        cLog::log (LOGERROR, "IAudioCaptureClient::ReleaseBuffer failed");
+        cLog::log (LOGERROR, "audioCaptureClient::ReleaseBuffer failed");
         return 0;
         }
         //}}}
@@ -663,16 +656,10 @@ DWORD WINAPI captureThread (LPVOID param) {
       audioCaptureClient->GetNextPacketSize (&packetSize);
       }
 
-    DWORD dwWaitResult = WaitForMultipleObjects (ARRAYSIZE(waitArray), waitArray, FALSE, INFINITE);
-    if (WAIT_OBJECT_0 == dwWaitResult) {
+    DWORD dwWaitResult = WaitForSingleObject (wakeUp, INFINITE);
+    if (dwWaitResult != WAIT_OBJECT_0) {
       //{{{
-      cLog::log (LOGINFO, "Received stop event");
-      done = true;
-      }
-      //}}}
-    else if (WAIT_OBJECT_0 + 1 != dwWaitResult) {
-      //{{{
-      cLog::log (LOGERROR, "Unexpected WaitForMultipleObjects return value %u", dwWaitResult);
+      cLog::log (LOGERROR, "WaitForSingleObject return value %u", dwWaitResult);
       return 0;
       }
       //}}}
@@ -690,13 +677,17 @@ int writeData (void* file, uint8_t* data, int size) {
   }
 //}}}
 //{{{
-DWORD WINAPI readThread (LPVOID context) {
+DWORD WINAPI readThread (LPVOID param) {
 
-  sCaptureContext* captureContext = (sCaptureContext*)context;
+  sCaptureContext* context = (sCaptureContext*)param;
   cLog::setThreadName ("read");
 
   CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
+
+  while (bipBuffer.getCommittedSize() == 0)
+    Sleep (10);
+  cWaveFile waveFile (context->waveFormatEx);
 
   FILE* aacFile = fopen ("out.aac", "wb");
 
@@ -752,8 +743,13 @@ DWORD WINAPI readThread (LPVOID context) {
   while (true) {
     int len = encoderContext->frame_size;
     auto ptr = (float*)bipBuffer.getContiguousBlock (len);
+
     if (len >= encoderContext->frame_size) {
+      // enough data to encode
       cLog::log (LOGINFO1, "encode read block frame_size bytes:%d", len);
+
+      waveFile.write (ptr, len / context->waveFormatEx->nBlockAlign, len);
+
       auto samplesL = (float*)frame->data[0];
       auto samplesR = (float*)frame->data[1];
       for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
@@ -896,23 +892,13 @@ int main() {
   CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
 
-  bipBuffer.allocateBuffer (1024 * 32);
-
-  sCaptureContext captureContext;
-
   list_devices();
+  sCaptureContext captureContext;
   get_default_device (&captureContext.MMDevice);
 
-  // create a "stop capturing now" event
-  captureContext.stopEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
-  if (NULL == captureContext.stopEvent) {
-    //{{{
-    cLog::log (LOGERROR, "CreateEvent failed: last error is %u", GetLastError());
-    return -__LINE__;
-    }
-    //}}}
-  CloseHandleOnExit closeStopEvent (captureContext.stopEvent);
+  bipBuffer.allocateBuffer (1024 * 32);
 
+  // read thread
   HANDLE hReadThread = CreateThread (NULL, 0, readThread, &captureContext, 0, NULL );
   if (hReadThread == NULL) {
     //{{{
@@ -922,6 +908,7 @@ int main() {
     //}}}
   CloseHandleOnExit closeThread1 (hReadThread);
 
+  // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &captureContext, 0, NULL );
   if (hThread == NULL) {
     //{{{
@@ -933,7 +920,6 @@ int main() {
 
   // at this point capture is running .wait for the user to press a key or for capture to error out
   WaitForSingleObjectOnExit waitForThread (hThread);
-  SetEventOnExit setStopEvent (captureContext.stopEvent);
   HANDLE hStdIn = GetStdHandle (STD_INPUT_HANDLE);
   if (INVALID_HANDLE_VALUE == hStdIn) {
     //{{{
