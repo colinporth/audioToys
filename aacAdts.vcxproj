@@ -25,6 +25,7 @@
     <ProjectGuid>{D5E40402-40F8-4CA2-AAA0-9A145F804F63}</ProjectGuid>
     <RootNamespace>aacAdts</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>sineAacAdts</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

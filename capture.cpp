@@ -2,7 +2,6 @@
 //{{{  includes
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 
 #include <stdio.h>
 #include <windows.h>
@@ -13,7 +12,6 @@
 
 #include <avrt.h>
 #include <functiondiscoverykeys_devpkey.h>
-
 #include <initguid.h>
 
 extern "C" {
@@ -24,20 +22,19 @@ extern "C" {
   #include <libswresample/swresample.h>
   }
 
-#include <string>
-
 #include "../shared/utils/cLog.h"
 #include "../shared/utils/cBipBuffer.h"
 //}}}
+
 #define CHANNELS 2
 #define SAMPLE_RATE 48000
 #define ENCODER_BITRATE 128000
 
 //{{{
-class cWaveFile {
+class cWavFile {
 public:
   //{{{
-  cWaveFile (char* filename, WAVEFORMATEX* waveFormatEx) {
+  cWavFile (char* filename, WAVEFORMATEX* waveFormatEx) {
 
     mFilename = (char*)malloc (strlen (filename));
     strcpy (mFilename, filename);
@@ -45,7 +42,7 @@ public:
     }
   //}}}
   //{{{
-  ~cWaveFile() {
+  ~cWavFile() {
     finish();
     }
   //}}}
@@ -259,33 +256,46 @@ public:
   //{{{
   cCapture() {
 
-    getCaptureDevice();
+    // activate a device enumerator
+    IMMDeviceEnumerator* pMMDeviceEnumerator = NULL;
+    if (FAILED (CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL,
+                                  CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator))) {
+      cLog::log (LOGERROR, "cCapture create IMMDeviceEnumerator failed");
+      }
 
-    mBipBuffer.allocateBuffer (1024 * 64);
+    else {
+      // get default render endpoint
+      if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
+        cLog::log (LOGERROR, "cCapture MMDeviceEnumerator::GetDefaultAudioEndpoint failed");
 
-    if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&mAudioClient)))
-      cLog::log (LOGERROR, "IMMDevice::Activate (IAudioClient) failed");
+      mBipBuffer.allocateBuffer (1024 * 64);
 
-    if (FAILED (mAudioClient->GetDevicePeriod (&mHhnsDefaultDevicePeriod, NULL)))
-      cLog::log (LOGERROR, "IAudioClient::GetDevicePeriod failed");
+      if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&mAudioClient)))
+        cLog::log (LOGERROR, "cCapture IMMDevice::Activate IAudioClient failed");
 
-    // get the default device format
-    if (FAILED (mAudioClient->GetMixFormat (&mWaveFormatEx)))
-      cLog::log (LOGERROR, "IAudioClient::GetMixFormat failed");
+      if (FAILED (mAudioClient->GetDevicePeriod (&mHhnsDefaultDevicePeriod, NULL)))
+        cLog::log (LOGERROR, "cCapture audioClient GetDevicePeriod failed");
 
-    // note that AUDCLNT_STREAMFLAGS_LOOPBACK and AUDCLNT_STREAMFLAGS_EVENTCALLBACK do not work together...
-    // the "data ready" event never gets set so we're going to do a timer-driven loop
-    if (FAILED (mAudioClient->Initialize (
-         AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, mWaveFormatEx, 0)))
-      cLog::log (LOGERROR, "IAudioClient::Initialize failed");
+      // get the default device format
+      if (FAILED (mAudioClient->GetMixFormat (&mWaveFormatEx)))
+        cLog::log (LOGERROR, "cCapture audioClient GetMixFormat failed");
 
-    // activate an IAudioCaptureClient
-    if (FAILED (mAudioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&mAudioCaptureClient)))
-      cLog::log (LOGERROR, "IAudioClient::GetService (IAudioCaptureClient) failed");
+      // with AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_EVENTCALLBACK "data ready" event never gets set
+      if (FAILED (mAudioClient->Initialize (
+           AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, mWaveFormatEx, 0)))
+        cLog::log (LOGERROR, "cCapture AudioClient initialize failed");
 
-    // start audioClient
-    if (FAILED (mAudioClient->Start()))
-      cLog::log (LOGERROR, "IAudioClient::Start failed");
+      // activate an IAudioCaptureClient
+      if (FAILED (mAudioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&mAudioCaptureClient)))
+        cLog::log (LOGERROR, "cCapture create IAudioCaptureClient failed");
+
+      // start audioClient
+      if (FAILED (mAudioClient->Start()))
+        cLog::log (LOGERROR, "cCapture audioClient start failed");
+
+      if (pMMDeviceEnumerator)
+        pMMDeviceEnumerator->Release();
+      }
     }
   //}}}
   //{{{
@@ -307,122 +317,111 @@ public:
     }
   //}}}
 
-  IMMDevice* mMMDevice = NULL;
-  IAudioClient* mAudioClient = NULL;
-  REFERENCE_TIME mHhnsDefaultDevicePeriod;
-  WAVEFORMATEX* mWaveFormatEx = NULL;
-  IAudioCaptureClient* mAudioCaptureClient = NULL;
-
-  cBipBuffer mBipBuffer;
-
-private:
   //{{{
-  void getCaptureDevice() {
+  void run() {
 
-    // activate a device enumerator
-    IMMDeviceEnumerator* pMMDeviceEnumerator = NULL;
-    if (FAILED (CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL,
-                                  CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator))) {
-      cLog::log (LOGERROR, "getCaptureDevice CoCreateInstance (IMMDeviceEnumerator) failed");
-      return;
+    // create a periodic waitable timer, -ve relative time, convert to milliseconds
+    HANDLE wakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
+    LARGE_INTEGER firstFire;
+    firstFire.QuadPart = -mHhnsDefaultDevicePeriod / 2;
+    LONG timeBetweenFires = (LONG)mHhnsDefaultDevicePeriod / 2 / (10 * 1000);
+    SetWaitableTimer (wakeUp, &firstFire, timeBetweenFires, NULL, NULL, FALSE);
+
+    bool done = false;
+    while (!done) {
+      UINT32 packetSize;
+      mAudioCaptureClient->GetNextPacketSize (&packetSize);
+      while (!done && (packetSize > 0)) {
+        BYTE* data;
+        UINT32 numFramesRead;
+        DWORD dwFlags;
+        if (FAILED (mAudioCaptureClient->GetBuffer (&data, &numFramesRead, &dwFlags, NULL, NULL))) {
+          //{{{  exit
+          cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer failed");
+          done = true;
+          break;
+          }
+          //}}}
+        if (numFramesRead == 0) {
+          //{{{  exit
+          cLog::log (LOGERROR, "audioCaptureClient::GetBuffer read 0 frames");
+          done = true;
+          }
+          //}}}
+        if (dwFlags == AUDCLNT_BUFFERFLAGS_SILENT)
+          cLog::log (LOGINFO, "audioCaptureClient::GetBuffer silent %d", numFramesRead);
+        else {
+          if (dwFlags == AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY)
+            cLog::log (LOGINFO, "audioCaptureClient::GetBuffer discontinuity %d", numFramesRead);
+
+          cLog::log (LOGINFO2, "captured frames %d bytes:%d", numFramesRead, numFramesRead * mWaveFormatEx->nBlockAlign);
+          LONG bytesToWrite = numFramesRead * mWaveFormatEx->nBlockAlign;
+          int bytesAllocated = 0;
+          uint8_t* ptr = mBipBuffer.reserve (bytesToWrite, bytesAllocated);
+          if (ptr && (bytesAllocated == bytesToWrite)) {
+            memcpy (ptr, data, bytesAllocated);
+            mBipBuffer.commit (bytesAllocated);
+            }
+          else
+            cLog::log (LOGERROR, "captureThread buffer full on write %d of  %d", bytesAllocated, bytesToWrite);
+          }
+
+        if (FAILED (mAudioCaptureClient->ReleaseBuffer (numFramesRead))) {
+          //{{{  exit
+          cLog::log (LOGERROR, "audioCaptureClient::ReleaseBuffer failed");
+          done = true;
+          break;
+          }
+          //}}}
+
+        mAudioCaptureClient->GetNextPacketSize (&packetSize);
+        }
+
+      DWORD dwWaitResult = WaitForSingleObject (wakeUp, INFINITE);
+      if (dwWaitResult != WAIT_OBJECT_0) {
+        //{{{  exit
+        cLog::log (LOGERROR, "WaitForSingleObject error %u", dwWaitResult);
+        done = true;
+        }
+        //}}}
       }
 
-    // get default render endpoint
-    if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
-      cLog::log (LOGERROR, "getCaptureDevice IMMDeviceEnumerator::GetDefaultAudioEndpoint failed");
-
-    if (pMMDeviceEnumerator)
-      pMMDeviceEnumerator->Release();
+    CancelWaitableTimer (wakeUp);
+    CloseHandle (wakeUp);
     }
-
   //}}}
+
+  WAVEFORMATEX* mWaveFormatEx = NULL;
+
+  cBipBuffer mBipBuffer;
+  float mMaxSampleValue = 0.f;
+
+private:
+  IMMDevice* mMMDevice = NULL;
+
+  IAudioClient* mAudioClient = NULL;
+  IAudioCaptureClient* mAudioCaptureClient = NULL;
+  REFERENCE_TIME mHhnsDefaultDevicePeriod;
   };
 //}}}
 //{{{
 DWORD WINAPI captureThread (LPVOID param) {
 
-  cLog::setThreadName ("capt");
   cCapture* capture = (cCapture*)param;
 
-  CoInitialize (NULL);
-  //{{{  register task with MMCSS
+  cLog::setThreadName ("capt");
+  CoInitializeEx (NULL, COINIT_MULTITHREADED);
+
+  //  register task with MMCSS, set off wakeup timer
   DWORD nTaskIndex = 0;
   HANDLE hTask = AvSetMmThreadCharacteristics ("Audio", &nTaskIndex);
-
-  if (hTask == NULL) {
-    cLog::log (LOGERROR, "AvSetMmThreadCharacteristics failed: last error = %u", GetLastError());
-    return 0;
+  if (hTask) {
+    capture->run();
+    AvRevertMmThreadCharacteristics (hTask);
     }
-  //}}}
-  //{{{  create and set the waitable timer
-  // create a periodic waitable timer
-  HANDLE wakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
+  else
+    cLog::log (LOGERROR, "AvSetMmThreadCharacteristics failed %u", GetLastError());
 
-  if (NULL == wakeUp) {
-    cLog::log (LOGERROR, "CreateWaitableTimer failed: last error = %u", GetLastError());
-    return 0;
-    }
-
-  LARGE_INTEGER liFirstFire;
-  liFirstFire.QuadPart = -capture->mHhnsDefaultDevicePeriod / 2; // negative means relative time
-  LONG lTimeBetweenFires = (LONG)capture->mHhnsDefaultDevicePeriod / 2 / (10 * 1000); // convert to milliseconds
-
-  if (!SetWaitableTimer (wakeUp, &liFirstFire, lTimeBetweenFires, NULL, NULL, FALSE)) {
-    cLog::log (LOGERROR, "SetWaitableTimer failed: last error = %u", GetLastError());
-    return 0;
-    }
-  //}}}
-
-  bool done = false;
-  while (!done) {
-    UINT32 packetSize;
-    capture->mAudioCaptureClient->GetNextPacketSize (&packetSize);
-    while (packetSize > 0) {
-      BYTE* data;
-      UINT32 numFramesRead;
-      DWORD dwFlags;
-      if (FAILED (capture->mAudioCaptureClient->GetBuffer (&data, &numFramesRead, &dwFlags, NULL, NULL))) {
-        cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer failed");
-        done = true;
-        break;
-        }
-      if (AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags)
-        cLog::log (LOGINFO, "audioCaptureClient::GetBuffer discontinuity");
-      else if (dwFlags != 0)
-        cLog::log (LOGINFO, "audioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
-      if (numFramesRead == 0) {
-        cLog::log (LOGERROR, "audioCaptureClient::GetBuffer read 0 frames");
-        done = true;
-        }
-
-      cLog::log (LOGINFO2, "captured frames %d bytes:%d", numFramesRead, numFramesRead * capture->mWaveFormatEx->nBlockAlign);
-      LONG bytesToWrite = numFramesRead * capture->mWaveFormatEx->nBlockAlign;
-      int bytesAllocated = 0;
-      uint8_t* ptr = capture->mBipBuffer.reserve (bytesToWrite, bytesAllocated);
-      if (ptr && (bytesAllocated == bytesToWrite)) {
-        memcpy (ptr, data, bytesAllocated);
-        capture->mBipBuffer.commit (bytesAllocated);
-        }
-
-      if (FAILED (capture->mAudioCaptureClient->ReleaseBuffer (numFramesRead))) {
-        cLog::log (LOGERROR, "audioCaptureClient::ReleaseBuffer failed");
-        done = true;
-        break;
-        }
-
-      capture->mAudioCaptureClient->GetNextPacketSize (&packetSize);
-      }
-
-    DWORD dwWaitResult = WaitForSingleObject (wakeUp, INFINITE);
-    if (dwWaitResult != WAIT_OBJECT_0) {
-      cLog::log (LOGERROR, "WaitForSingleObject return value %u", dwWaitResult);
-      done = true;
-      }
-    }
-
-  AvRevertMmThreadCharacteristics (hTask);
-  CancelWaitableTimer (wakeUp);
-  CloseHandle (wakeUp);
   CoUninitialize();
 
   return 0;
@@ -450,10 +449,10 @@ int main() {
   //av_log_set_level (AV_LOG_VERBOSE);
   av_log_set_callback (avLogCallback);
 
-  CoInitialize (NULL);
+  CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
   cCapture capture;
-  cWaveFile waveFile ("out.wav", capture.mWaveFormatEx);
+  cWavFile wavFile ("E:/Capture/out.wav", capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
@@ -518,25 +517,28 @@ int main() {
 
   AVPacket* packet = av_packet_alloc();
 
+  float lastMaxSampleValue = 0.f;
   bool done = false;
   while (!done) {
-    int len = encoderContext->frame_size;
-    auto ptr = (float*)capture.mBipBuffer.getContiguousBlock (len);
+    int bytes = encoderContext->frame_size;
+    auto ptr = (float*)capture.mBipBuffer.getContiguousBlock (bytes);
 
-    if (len >= encoderContext->frame_size) {
+    if (bytes >= encoderContext->frame_size) {
       // enough data to encode
-      cLog::log (LOGINFO1, "encode read block frame_size bytes:%d", len);
+      cLog::log (LOGINFO1, "encode read block frame_size bytes:%d", bytes);
 
-      waveFile.write (ptr, len);
+      wavFile.write (ptr, bytes);
 
       // float32 interleaved to float32 planar
       auto samplesL = (float*)frame->data[0];
       auto samplesR = (float*)frame->data[1];
       for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
+        capture.mMaxSampleValue = max (capture.mMaxSampleValue, abs(*ptr));
         samplesL[sample] = *ptr++;
+        capture.mMaxSampleValue = max (capture.mMaxSampleValue, abs(*ptr));
         samplesR[sample] = *ptr++;
         }
-      capture.mBipBuffer.decommitBlock (len);
+      capture.mBipBuffer.decommitBlock (bytes);
 
       if (!avcodec_send_frame (encoderContext, frame))
         while (!avcodec_receive_packet (encoderContext, packet))
@@ -544,6 +546,11 @@ int main() {
             done = true;
             break;
             }
+
+      if (capture.mMaxSampleValue > lastMaxSampleValue) {
+        cLog::log (LOGINFO, "new max %6.4f", capture.mMaxSampleValue);
+        lastMaxSampleValue = capture.mMaxSampleValue;
+        }
       }
     else
       Sleep (10);

@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="transcode_aac.c" />
+    <ClCompile Include="transcode_aac.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{16ADE44C-F4FC-4829-91D8-C5812021D784}</ProjectGuid>
