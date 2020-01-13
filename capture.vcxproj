@@ -21,11 +21,9 @@
   <ItemGroup>
     <ClCompile Include="..\shared\utils\cLog.cpp" />
     <ClCompile Include="capture.cpp" />
-    <ClCompile Include="tinywav.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\shared\utils\cLog.h" />
-    <ClInclude Include="tinywav.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{B8217CD3-EB29-418C-A6D3-0845AAE0CA84}</ProjectGuid>
@@ -99,7 +97,7 @@
       <SDLCheck>true</SDLCheck>
       <TreatWarningAsError>false</TreatWarningAsError>
       <PreprocessorDefinitions>UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\d2dwin\inc\ffmpeg;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\ffmpeg\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

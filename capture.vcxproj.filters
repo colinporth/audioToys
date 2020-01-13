@@ -3,7 +3,6 @@
   <ItemGroup>
     <ClCompile Include="capture.cpp" />
     <ClCompile Include="..\shared\utils\cLog.cpp" />
-    <ClCompile Include="tinywav.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="h">
@@ -12,9 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\shared\utils\cLog.h">
-      <Filter>h</Filter>
-    </ClInclude>
-    <ClInclude Include="tinywav.h">
       <Filter>h</Filter>
     </ClInclude>
   </ItemGroup>

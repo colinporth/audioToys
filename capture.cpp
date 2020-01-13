@@ -1,5 +1,5 @@
 // capture.cpp
-//{{{  includes defines
+//{{{  includes
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -36,102 +36,211 @@ cBipBuffer bipBuffer;
 #define CHANNELS 2
 #define SAMPLE_RATE 48000
 #define ENCODER_BITRATE 128000
-//{{{
-int writeData (void* file, uint8_t* data, int size) {
-
-  fwrite (data, 1, size, (FILE*)file);
-  return size;
-  }
-//}}}
 
 //{{{
-void sine() {
-
-  FILE* file = fopen ("out.aac", "wb");
-
-  AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
-
-  AVCodecContext* encoderContext = avcodec_alloc_context3 (codec);
-  encoderContext->sample_fmt = AV_SAMPLE_FMT_FLTP;
-  encoderContext->bit_rate = ENCODER_BITRATE;
-  encoderContext->sample_rate = SAMPLE_RATE;
-  encoderContext->channels = CHANNELS;
-  encoderContext->channel_layout = av_get_default_channel_layout (CHANNELS);
-  encoderContext->time_base.num = 1;
-  encoderContext->time_base.den = SAMPLE_RATE;
-  encoderContext->codec_type = AVMEDIA_TYPE_AUDIO ;
-  avcodec_open2 (encoderContext, codec, NULL);
-
-  // create ADTS container for encoded frames
-  AVOutputFormat* outputFormat = av_guess_format ("adts", NULL, NULL);
-  AVFormatContext* outputFormatContext = NULL;
-  avformat_alloc_output_context2 (&outputFormatContext, outputFormat, "", NULL);
-
-  // create ioContext for adts container with writeData callback
-  int outBufferSize = 4096;
-  uint8_t* outBuffer = (uint8_t*)av_malloc (outBufferSize);
-  AVIOContext* ioContext = avio_alloc_context (outBuffer, outBufferSize, 1, file, NULL, &writeData, NULL);
-
-  // link container's context to the previous I/O context
-  outputFormatContext->pb = ioContext;
-  AVStream* adts_stream = avformat_new_stream (outputFormatContext, NULL);
-  adts_stream->id = outputFormatContext->nb_streams-1;
-
-  // copy encoder's parameters
-  avcodec_parameters_from_context (adts_stream->codecpar, encoderContext);
-
-  // allocate stream private data and write the stream header
-  avformat_write_header (outputFormatContext, NULL);
-
-  // allocate an frame to be filled with input data.
-  AVFrame* frame = av_frame_alloc();
-  frame->format = AV_SAMPLE_FMT_FLTP;
-  frame->channels = CHANNELS;
-  frame->nb_samples = encoderContext->frame_size;
-  frame->sample_rate = SAMPLE_RATE;
-  frame->channel_layout = av_get_default_channel_layout (CHANNELS);
-
-  // allocate the frame's data buffer
-  av_frame_get_buffer (frame, 0);
-
-  AVPacket* packet = av_packet_alloc();
-
-  double t = 0.f;
-  double inc = 2.0 * M_PI * 440.0 / encoderContext->sample_rate;
-  for (int i = 0; i < 200; i++) {
-    auto samples0 = (float*)frame->data[0];
-    auto samples1 = (float*)frame->data[1];
-    for (auto j = 0; j < encoderContext->frame_size; j++) {
-      samples0[j] = float(sin(t));
-      samples1[j] = float(sin(t));
-      t += inc;
-      }
-
-    if (avcodec_send_frame (encoderContext, frame) == 0)
-      while (avcodec_receive_packet (encoderContext, packet) == 0)
-        if (av_write_frame (outputFormatContext, packet) < 0)
-          exit(0);
+class cWaveFile {
+public:
+  //{{{
+  cWaveFile (WAVEFORMATEX* waveFormatEx) {
+    open (waveFormatEx);
     }
+  //}}}
+  //{{{
+  ~cWaveFile() {
+    finish();
+    }
+  //}}}
 
-  // Flush cached packets
-  if (avcodec_send_frame (encoderContext, NULL) == 0)
-    while (avcodec_receive_packet (encoderContext, packet) == 0)
-      if (av_write_frame (outputFormatContext, packet) < 0)
-        exit(0);
+  //{{{
+  LONG write (BYTE* data, int numFrames, LONG bytesToWrite) {
+    frames += numFrames;
+    return mmioWrite (file, reinterpret_cast<PCHAR>(data), bytesToWrite);
+    }
+  //}}}
 
-  av_write_trailer (outputFormatContext);
-  fclose (file);
+private:
+  //{{{
+  void open (WAVEFORMATEX* waveFormatEx) {
 
-  avcodec_free_context (&encoderContext);
-  av_frame_free (&frame);
-  avformat_free_context (outputFormatContext);
-  av_freep (&ioContext);
-  av_freep (&outBuffer);
-  av_packet_free (&packet);
+    MMIOINFO mi = { 0 };
+    file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE | MMIO_CREATE);
 
-  return;
-  }
+    // make a RIFF/WAVE chunk
+    ckRIFF.ckid = MAKEFOURCC ('R', 'I', 'F', 'F');
+    ckRIFF.fccType = MAKEFOURCC ('W', 'A', 'V', 'E');
+
+    MMRESULT result = mmioCreateChunk (file, &ckRIFF, MMIO_CREATERIFF);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioCreateChunk (\"RIFF/WAVE\") failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    // make a 'fmt ' chunk (within the RIFF/WAVE chunk)
+    MMCKINFO chunk;
+    chunk.ckid = MAKEFOURCC ('f', 'm', 't', ' ');
+    result = mmioCreateChunk (file, &chunk, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    // write the WAVEFORMATEX data to it
+    LONG lBytesInWfx = sizeof(WAVEFORMATEX) + waveFormatEx->cbSize;
+    LONG lBytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(const_cast<LPWAVEFORMATEX>(waveFormatEx)), lBytesInWfx);
+    if (lBytesWritten != lBytesInWfx) {
+      //{{{
+      cLog::log (LOGERROR, "mmioWrite (fmt data) wrote %u bytes; expected %u bytes", lBytesWritten, lBytesInWfx);
+      return;
+      }
+      //}}}
+
+    // ascend from the 'fmt ' chunk
+    result = mmioAscend(file, &chunk, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioAscend (\"fmt \" failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    // make a 'fact' chunk whose data is (DWORD)0
+    chunk.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
+    result = mmioCreateChunk (file, &chunk, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    // write (DWORD)0 to it
+    // this is cleaned up later
+    frames = 0;
+    lBytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
+    if (lBytesWritten != sizeof (frames)) {
+      //{{{
+      cLog::log (LOGERROR, "mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(frames));
+      return;
+      }
+      //}}}
+
+    // ascend from the 'fact' chunk
+    result = mmioAscend (file, &chunk, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioAscend (\"fact\" failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    // make a 'data' chunk and leave the data pointer there
+    ckData.ckid = MAKEFOURCC ('d', 'a', 't', 'a');
+    result = mmioCreateChunk (file, &ckData, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioCreateChunk(\"data\") failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+    }
+  //}}}
+  //{{{
+  void finish() {
+
+    MMRESULT result = mmioAscend (file, &ckData, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioAscend(\"data\" failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    result = mmioAscend (file, &ckRIFF, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioAscend(\"RIFF/WAVE\" failed: MMRESULT = 0x%08x", result);
+      return;
+      }
+      //}}}
+
+    result = mmioClose (file, 0);
+    file = NULL;
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioClose failed: MMSYSERR = %u", result);
+      return;
+      }
+      //}}}
+
+    // everything went well... fixup the fact chunk in the file
+
+    // reopen the file in read/write mode
+    MMIOINFO mi = { 0 };
+    file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
+    if (NULL == file) {
+      //{{{
+      cLog::log (LOGERROR, "mmioOpen failed");
+      return;
+      }
+      //}}}
+
+    // descend into the RIFF/WAVE chunk
+    MMCKINFO ckRIFF1 = {0};
+    ckRIFF1.ckid = MAKEFOURCC ('W', 'A', 'V', 'E'); // this is right for mmioDescend
+    result = mmioDescend (file, &ckRIFF1, NULL, MMIO_FINDRIFF);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
+      return;
+      }
+      //}}}
+
+    // descend into the fact chunk
+    MMCKINFO ckFact = {0};
+    ckFact.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
+    result = mmioDescend (file, &ckFact, &ckRIFF1, MMIO_FINDCHUNK);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
+      return;
+      }
+      //}}}
+
+    // write frames to the fact chunk
+    LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
+    if (bytesWritten != sizeof (frames)) {
+      //{{{
+      cLog::log (LOGERROR, "Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
+      return;
+      }
+      //}}}
+
+    // ascend out of the fact chunk
+    result = mmioAscend (file, &ckFact, 0);
+    if (MMSYSERR_NOERROR != result) {
+      //{{{
+      cLog::log (LOGERROR, "mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
+      return;
+      }
+      //}}}
+
+    mmioClose (file, 0);
+    }
+  //}}}
+
+  HMMIO file;
+
+  MMCKINFO ckRIFF = {0};
+  MMCKINFO ckData = {0};
+
+  int frames = 0;
+  };
 //}}}
+
 
 //{{{
 class AudioClientStopOnExit {
@@ -385,178 +494,6 @@ HRESULT get_default_device (IMMDevice** ppMMDevice) {
 //}}}
 
 //{{{
-HRESULT writeWaveHeader (HMMIO hFile, LPCWAVEFORMATEX pwfx, MMCKINFO* pckRIFF, MMCKINFO* pckData) {
-
-  // make a RIFF/WAVE chunk
-  pckRIFF->ckid = MAKEFOURCC ('R', 'I', 'F', 'F');
-  pckRIFF->fccType = MAKEFOURCC ('W', 'A', 'V', 'E');
-
-  MMRESULT result = mmioCreateChunk (hFile, pckRIFF, MMIO_CREATERIFF);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioCreateChunk (\"RIFF/WAVE\") failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-    //}}}
-
-  // make a 'fmt ' chunk (within the RIFF/WAVE chunk)
-  MMCKINFO chunk;
-  chunk.ckid = MAKEFOURCC ('f', 'm', 't', ' ');
-  result = mmioCreateChunk (hFile, &chunk, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-    //}}}
-
-  // write the WAVEFORMATEX data to it
-  LONG lBytesInWfx = sizeof(WAVEFORMATEX) + pwfx->cbSize;
-  LONG lBytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(const_cast<LPWAVEFORMATEX>(pwfx)), lBytesInWfx);
-  if (lBytesWritten != lBytesInWfx) {
-    //{{{
-    cLog::log (LOGERROR, "mmioWrite (fmt data) wrote %u bytes; expected %u bytes", lBytesWritten, lBytesInWfx);
-    return E_FAIL;
-    }
-    //}}}
-
-  // ascend from the 'fmt ' chunk
-  result = mmioAscend(hFile, &chunk, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioAscend (\"fmt \" failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-    //}}}
-
-  // make a 'fact' chunk whose data is (DWORD)0
-  chunk.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
-  result = mmioCreateChunk (hFile, &chunk, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioCreateChunk (\"fmt \") failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-    //}}}
-
-  // write (DWORD)0 to it
-  // this is cleaned up later
-  DWORD frames = 0;
-  lBytesWritten = mmioWrite (hFile, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
-  if (lBytesWritten != sizeof (frames)) {
-    //{{{
-    cLog::log (LOGERROR, "mmioWrite(fact data) wrote %u bytes; expected %u bytes", lBytesWritten, (UINT32)sizeof(frames));
-    return E_FAIL;
-    }
-    //}}}
-
-  // ascend from the 'fact' chunk
-  result = mmioAscend (hFile, &chunk, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioAscend (\"fact\" failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-    //}}}
-
-  // make a 'data' chunk and leave the data pointer there
-  pckData->ckid = MAKEFOURCC ('d', 'a', 't', 'a');
-  result = mmioCreateChunk (hFile, pckData, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioCreateChunk(\"data\") failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-    //}}}
-
-  return S_OK;
-  }
-//}}}
-//{{{
-HRESULT finishWaveFile (HMMIO file, MMCKINFO* pckRIFF, MMCKINFO* pckData, int frames) {
-
-  MMRESULT result;
-
-  result = mmioAscend (file, pckData, 0);
-  if (MMSYSERR_NOERROR != result) {
-    cLog::log (LOGERROR, "mmioAscend(\"data\" failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-
-  result = mmioAscend (file, pckRIFF, 0);
-  if (MMSYSERR_NOERROR != result) {
-    cLog::log (LOGERROR, "mmioAscend(\"RIFF/WAVE\" failed: MMRESULT = 0x%08x", result);
-    return E_FAIL;
-    }
-
-  result = mmioClose (file, 0);
-  file = NULL;
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioClose failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  // everything went well... fixup the fact chunk in the file
-
-  // reopen the file in read/write mode
-  MMIOINFO mi = { 0 };
-  file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE);
-  if (NULL == file) {
-    //{{{
-    cLog::log (LOGERROR, "mmioOpen failed");
-    return -__LINE__;
-    }
-    //}}}
-
-  // descend into the RIFF/WAVE chunk
-  MMCKINFO ckRIFF = {0};
-  ckRIFF.ckid = MAKEFOURCC ('W', 'A', 'V', 'E'); // this is right for mmioDescend
-  result = mmioDescend (file, &ckRIFF, NULL, MMIO_FINDRIFF);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioDescend(\"WAVE\") failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  // descend into the fact chunk
-  MMCKINFO ckFact = {0};
-  ckFact.ckid = MAKEFOURCC ('f', 'a', 'c', 't');
-  result = mmioDescend (file, &ckFact, &ckRIFF, MMIO_FINDCHUNK);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioDescend(\"fact\") failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  // write frames to the fact chunk
-  LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(&frames), sizeof(frames));
-  if (bytesWritten != sizeof (frames)) {
-    //{{{
-    cLog::log (LOGERROR, "Updating the fact chunk wrote %u bytes; expected %u", bytesWritten, (UINT32)sizeof(frames));
-    return -__LINE__;
-    }
-    //}}}
-
-  // ascend out of the fact chunk
-  result = mmioAscend (file, &ckFact, 0);
-  if (MMSYSERR_NOERROR != result) {
-    //{{{
-    cLog::log (LOGERROR, "mmioAscend(\"fact\") failed: MMSYSERR = %u", result);
-    return -__LINE__;
-    }
-    //}}}
-
-  mmioClose (file, 0);
-
-  return S_OK;
-  }
-//}}}
-
-//{{{
 struct sCaptureContext {
   IMMDevice* MMDevice;
   HANDLE stopEvent;
@@ -596,47 +533,24 @@ DWORD WINAPI captureThread (LPVOID param) {
 
   CoTaskMemFreeOnExit freeMixFormat (waveFormatEx);
   //}}}
-  //{{{  coerce int16 waveFormat, in-place not changing size of format, engine auto-convert float to int
-  switch (waveFormatEx->wFormatTag) {
-    case WAVE_FORMAT_IEEE_FLOAT:
-      cLog::log (LOGINFO, "WAVE_FORMAT_IEEE_FLOAT");
-      waveFormatEx->wFormatTag = WAVE_FORMAT_PCM;
-      waveFormatEx->wBitsPerSample = 16;
-      waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
-      waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
-      break;
+  //{{{  engine auto-converts float to int
+  //if (waveFormatEx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+    //cLog::log (LOGINFO, "device is  WAVE_FORMAT_EXTENSIBLE");
+    //PWAVEFORMATEXTENSIBLE waveFormatExtensible = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
+    //if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, waveFormatExtensible->SubFormat)) {
+      //cLog::log (LOGINFO, "device is KSDATAFORMAT_SUBTYPE_IEEE_FLOAT");
 
-    case WAVE_FORMAT_EXTENSIBLE: {
-      cLog::log (LOGINFO, "WAVE_FORMAT_EXTENSIBLE");
-      PWAVEFORMATEXTENSIBLE pEx = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(waveFormatEx);
-      if (IsEqualGUID (KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) {
-        cLog::log (LOGINFO, "- KSDATAFORMAT_SUBTYPE_IEEE_FLOAT");
-        pEx->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
-        pEx->Samples.wValidBitsPerSample = 16;
-        waveFormatEx->wBitsPerSample = 16;
-        waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
-        waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
-        }
-      else {
-        cLog::log (LOGERROR, "%s", L"Don't know how to coerce mix format to int-16");
-        return 0;
-        }
-      }
-      break;
+      //waveFormatExtensible->Samples.wValidBitsPerSample = 16;
+      //waveFormatExtensible->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
 
-    default:
-      cLog::log (LOGERROR, "Don't know how to coerce WAVEFORMATEX with wFormatTag = 0x%08x to int-16", waveFormatEx->wFormatTag);
-      return 0;
-    }
+      //waveFormatEx->wBitsPerSample = 16;
+      //waveFormatEx->nBlockAlign = waveFormatEx->nChannels * waveFormatEx->wBitsPerSample / 8;
+      //waveFormatEx->nAvgBytesPerSec = waveFormatEx->nBlockAlign * waveFormatEx->nSamplesPerSec;
+      //}
+    //}
   //}}}
 
-  MMIOINFO mi = { 0 };
-  HMMIO file = mmioOpen (const_cast<LPWSTR>(DEFAULT_FILE), &mi, MMIO_READWRITE | MMIO_CREATE);
-
-  MMCKINFO ckRIFF = {0};
-  MMCKINFO ckData = {0};
-  if (FAILED (writeWaveHeader (file, waveFormatEx, &ckRIFF, &ckData)))
-    return 0;
+  cWaveFile waveFile (waveFormatEx);
 
   //{{{  create a periodic waitable timer
   HANDLE wakeUp = CreateWaitableTimer (NULL, FALSE, NULL);
@@ -696,65 +610,56 @@ DWORD WINAPI captureThread (LPVOID param) {
   //}}}
 
   // loopback capture loop
-  int frames = 0;
   HANDLE waitArray[2] = { context->stopEvent, wakeUp };
   bool done = false;
   while (!done) {
     UINT32 packetSize;
     audioCaptureClient->GetNextPacketSize (&packetSize);
     while (packetSize > 0) {
-      BYTE* pData;
-      UINT32 numFramesToRead;
+      BYTE* data;
+      UINT32 numFramesRead;
       DWORD dwFlags;
-      if (FAILED (audioCaptureClient->GetBuffer (&pData, &numFramesToRead, &dwFlags, NULL, NULL))) {
+      if (FAILED (audioCaptureClient->GetBuffer (&data, &numFramesRead, &dwFlags, NULL, NULL))) {
         //{{{
         cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer failed");
         return 0;
         }
         //}}}
-      if ((frames == 0) && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
-        //{{{
-        cLog::log (LOGINFO, "glitch on first packet");
-        }
-        //}}}
-      else if (dwFlags != 0) {
-        //{{{
-        cLog::log (LOGINFO, "IAudioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
-        return 0;
-        }
-        //}}}
-      if (numFramesToRead == 0) {
+      if (AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags)
+        cLog::log (LOGINFO, "DISCONTINUITY");
+      else if (dwFlags != 0)
+        cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer flags 0x%08x", dwFlags);
+      if (numFramesRead == 0) {
         //{{{
         cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer read 0 frames");
         return 0;
         }
         //}}}
 
-      //cLog::log (LOGINFO, "numFrames %d %d %d bytes:%d\n",
-
-      LONG bytesToWrite = numFramesToRead * waveFormatEx->nBlockAlign;
+      cLog::log (LOGINFO2, "captured frames %d bytes:%d", numFramesRead, numFramesRead * waveFormatEx->nBlockAlign);
+      LONG bytesToWrite = numFramesRead * waveFormatEx->nBlockAlign;
       int bytesAllocated = 0;
       uint8_t* ptr = bipBuffer.reserve (bytesToWrite, bytesAllocated);
       if (ptr && (bytesAllocated == bytesToWrite)) {
-        memcpy (ptr, pData, bytesAllocated);
+        memcpy (ptr, data, bytesAllocated);
         bipBuffer.commit (bytesAllocated);
         }
 
-      LONG bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(pData), bytesToWrite);
+      LONG bytesWritten =  waveFile.write (data, numFramesRead, bytesToWrite);
+
       if (bytesWritten != bytesToWrite) {
         //{{{
         cLog::log (LOGERROR, "mmioWrite wrote %u bytes expected %u bytes", bytesWritten, bytesToWrite);
         return 0;
         }
         //}}}
-      if (FAILED (audioCaptureClient->ReleaseBuffer (numFramesToRead))) {
+      if (FAILED (audioCaptureClient->ReleaseBuffer (numFramesRead))) {
         //{{{
         cLog::log (LOGERROR, "IAudioCaptureClient::ReleaseBuffer failed");
         return 0;
         }
         //}}}
 
-      frames += numFramesToRead;
       audioCaptureClient->GetNextPacketSize (&packetSize);
       }
 
@@ -773,9 +678,15 @@ DWORD WINAPI captureThread (LPVOID param) {
       //}}}
     }
 
-  finishWaveFile (file, &ckData, &ckRIFF, frames);
-
   return 0;
+  }
+//}}}
+
+//{{{
+int writeData (void* file, uint8_t* data, int size) {
+
+  fwrite (data, 1, size, (FILE*)file);
+  return size;
   }
 //}}}
 //{{{
@@ -786,6 +697,101 @@ DWORD WINAPI readThread (LPVOID context) {
 
   CoInitialize (NULL);
   CoUninitializeOnExit cuoe;
+
+  FILE* aacFile = fopen ("out.aac", "wb");
+
+  AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
+
+  AVCodecContext* encoderContext = avcodec_alloc_context3 (codec);
+  encoderContext->sample_fmt = AV_SAMPLE_FMT_FLTP;
+  encoderContext->bit_rate = ENCODER_BITRATE;
+  encoderContext->sample_rate = SAMPLE_RATE;
+  encoderContext->channels = CHANNELS;
+  encoderContext->channel_layout = av_get_default_channel_layout (CHANNELS);
+  encoderContext->time_base.num = 1;
+  encoderContext->time_base.den = SAMPLE_RATE;
+  encoderContext->codec_type = AVMEDIA_TYPE_AUDIO ;
+  avcodec_open2 (encoderContext, codec, NULL);
+
+  // create ADTS container for encoded frames
+  AVOutputFormat* outputFormat = av_guess_format ("adts", NULL, NULL);
+  AVFormatContext* outputFormatContext = NULL;
+  avformat_alloc_output_context2 (&outputFormatContext, outputFormat, "", NULL);
+
+  // create ioContext for adts container with writeData callback
+  int outBufferSize = 4096;
+  uint8_t* outBuffer = (uint8_t*)av_malloc (outBufferSize);
+  AVIOContext* ioContext = avio_alloc_context (outBuffer, outBufferSize, 1, aacFile, NULL, &writeData, NULL);
+
+  // link container's context to the previous I/O context
+  outputFormatContext->pb = ioContext;
+  AVStream* adts_stream = avformat_new_stream (outputFormatContext, NULL);
+  adts_stream->id = outputFormatContext->nb_streams-1;
+
+  // copy encoder's parameters
+  avcodec_parameters_from_context (adts_stream->codecpar, encoderContext);
+
+  // allocate stream private data and write the stream header
+  avformat_write_header (outputFormatContext, NULL);
+
+  // allocate an frame to be filled with input data.
+  AVFrame* frame = av_frame_alloc();
+  frame->format = AV_SAMPLE_FMT_FLTP;
+  frame->channels = CHANNELS;
+  frame->nb_samples = encoderContext->frame_size;
+  frame->sample_rate = SAMPLE_RATE;
+  frame->channel_layout = av_get_default_channel_layout (CHANNELS);
+
+  cLog::log (LOGINFO, "frame_size %d", encoderContext->frame_size);
+
+  // allocate the frame's data buffer
+  av_frame_get_buffer (frame, 0);
+
+  AVPacket* packet = av_packet_alloc();
+
+  while (true) {
+    int len = encoderContext->frame_size;
+    auto ptr = (float*)bipBuffer.getContiguousBlock (len);
+    if (len >= encoderContext->frame_size) {
+      cLog::log (LOGINFO1, "encode read block frame_size bytes:%d", len);
+      auto samplesL = (float*)frame->data[0];
+      auto samplesR = (float*)frame->data[1];
+      for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
+        samplesL[sample] = *ptr++;
+        samplesR[sample] = *ptr++;
+        }
+      bipBuffer.decommitBlock (len);
+
+      if (avcodec_send_frame (encoderContext, frame) == 0)
+        while (avcodec_receive_packet (encoderContext, packet) == 0)
+          if (av_write_frame (outputFormatContext, packet) < 0)
+            exit(0);
+      }
+    else
+      Sleep (1);
+    }
+
+  // Flush cached packets
+  if (avcodec_send_frame (encoderContext, NULL) == 0)
+    while (avcodec_receive_packet (encoderContext, packet) == 0)
+      if (av_write_frame (outputFormatContext, packet) < 0)
+        exit(0);
+
+  av_write_trailer (outputFormatContext);
+  fclose (aacFile);
+
+  avcodec_free_context (&encoderContext);
+  av_frame_free (&frame);
+  avformat_free_context (outputFormatContext);
+  av_freep (&ioContext);
+  av_freep (&outBuffer);
+  av_packet_free (&packet);
+
+  return 0;
+  }
+//}}}
+//{{{
+DWORD WINAPI sineThread (LPVOID context) {
 
   FILE* file = fopen ("out.aac", "wb");
 
@@ -831,33 +837,26 @@ DWORD WINAPI readThread (LPVOID context) {
   frame->sample_rate = SAMPLE_RATE;
   frame->channel_layout = av_get_default_channel_layout (CHANNELS);
 
-  cLog::log (LOGINFO, "frame_size %d", encoderContext->frame_size);
-
   // allocate the frame's data buffer
   av_frame_get_buffer (frame, 0);
 
   AVPacket* packet = av_packet_alloc();
 
-  while (true) {
-    int len = encoderContext->frame_size;
-    auto ptr = (int16_t*)bipBuffer.getContiguousBlock (len);
-    if (len >= encoderContext->frame_size) {
-      cLog::log (LOGINFO1, "read block %d", len);
-      auto samplesL = (float*)frame->data[0];
-      auto samplesR = (float*)frame->data[1];
-      for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
-        samplesL[sample] = float(*ptr++) / 0x10000;
-        samplesR[sample] = float(*ptr++) / 0x10000;
-        }
-      bipBuffer.decommitBlock (len);
-
-      if (avcodec_send_frame (encoderContext, frame) == 0)
-        while (avcodec_receive_packet (encoderContext, packet) == 0)
-          if (av_write_frame (outputFormatContext, packet) < 0)
-            exit(0);
+  double t = 0.f;
+  double inc = 2.0 * M_PI * 440.0 / encoderContext->sample_rate;
+  for (int i = 0; i < 200; i++) {
+    auto samples0 = (float*)frame->data[0];
+    auto samples1 = (float*)frame->data[1];
+    for (auto j = 0; j < encoderContext->frame_size; j++) {
+      samples0[j] = float(sin(t));
+      samples1[j] = float(sin(t));
+      t += inc;
       }
-    else
-      Sleep (1);
+
+    if (avcodec_send_frame (encoderContext, frame) == 0)
+      while (avcodec_receive_packet (encoderContext, packet) == 0)
+        if (av_write_frame (outputFormatContext, packet) < 0)
+          exit(0);
     }
 
   // Flush cached packets
