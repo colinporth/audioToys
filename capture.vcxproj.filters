@@ -13,5 +13,14 @@
     <ClInclude Include="..\shared\utils\cLog.h">
       <Filter>h</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\utils\utils.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\utils\date.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\utils\cBipBuffer.h">
+      <Filter>h</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

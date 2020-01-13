@@ -255,44 +255,46 @@ class cCapture {
 public:
   //{{{
   cCapture() {
-    getCaptureDevice();
-    mBipBuffer.allocateBuffer (1024 * 32);
 
-    if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&audioClient)))
+    getCaptureDevice();
+
+    mBipBuffer.allocateBuffer (1024 * 64);
+
+    if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&mAudioClient)))
       cLog::log (LOGERROR, "IMMDevice::Activate (IAudioClient) failed");
 
-    if (FAILED (audioClient->GetDevicePeriod (&hnsDefaultDevicePeriod, NULL)))
+    if (FAILED (mAudioClient->GetDevicePeriod (&mHhnsDefaultDevicePeriod, NULL)))
       cLog::log (LOGERROR, "IAudioClient::GetDevicePeriod failed");
 
     // get the default device format
-    if (FAILED (audioClient->GetMixFormat (&mWaveFormatEx)))
+    if (FAILED (mAudioClient->GetMixFormat (&mWaveFormatEx)))
       cLog::log (LOGERROR, "IAudioClient::GetMixFormat failed");
 
     // note that AUDCLNT_STREAMFLAGS_LOOPBACK and AUDCLNT_STREAMFLAGS_EVENTCALLBACK do not work together...
     // the "data ready" event never gets set so we're going to do a timer-driven loop
-    if (FAILED (audioClient->Initialize (
+    if (FAILED (mAudioClient->Initialize (
          AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, mWaveFormatEx, 0)))
       cLog::log (LOGERROR, "IAudioClient::Initialize failed");
 
     // activate an IAudioCaptureClient
-    if (FAILED (audioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&audioCaptureClient)))
+    if (FAILED (mAudioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&mAudioCaptureClient)))
       cLog::log (LOGERROR, "IAudioClient::GetService (IAudioCaptureClient) failed");
 
     // start audioClient
-    if (FAILED (audioClient->Start()))
+    if (FAILED (mAudioClient->Start()))
       cLog::log (LOGERROR, "IAudioClient::Start failed");
     }
   //}}}
   //{{{
   ~cCapture() {
 
-    if (audioClient) {
-      audioClient->Stop();
-      audioClient->Release();
+    if (mAudioClient) {
+      mAudioClient->Stop();
+      mAudioClient->Release();
       }
 
-    if (audioCaptureClient)
-      audioCaptureClient->Release();
+    if (mAudioCaptureClient)
+      mAudioCaptureClient->Release();
 
     if (mWaveFormatEx)
       CoTaskMemFree (mWaveFormatEx);
@@ -303,10 +305,10 @@ public:
   //}}}
 
   IMMDevice* mMMDevice = NULL;
-  IAudioClient* audioClient = NULL;
-  REFERENCE_TIME hnsDefaultDevicePeriod;
+  IAudioClient* mAudioClient = NULL;
+  REFERENCE_TIME mHhnsDefaultDevicePeriod;
   WAVEFORMATEX* mWaveFormatEx = NULL;
-  IAudioCaptureClient* audioCaptureClient = NULL;
+  IAudioCaptureClient* mAudioCaptureClient = NULL;
 
   cBipBuffer mBipBuffer;
 
@@ -323,7 +325,7 @@ private:
       }
 
     // get default render endpoint
-    if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eConsole, &mMMDevice)))
+    if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
       cLog::log (LOGERROR, "getCaptureDevice IMMDeviceEnumerator::GetDefaultAudioEndpoint failed");
 
     if (pMMDeviceEnumerator)
@@ -334,7 +336,7 @@ private:
   };
 //}}}
 //{{{
-static DWORD WINAPI captureThread (LPVOID param) {
+DWORD WINAPI captureThread (LPVOID param) {
 
   cLog::setThreadName ("capt");
   cCapture* capture = (cCapture*)param;
@@ -359,8 +361,8 @@ static DWORD WINAPI captureThread (LPVOID param) {
     }
 
   LARGE_INTEGER liFirstFire;
-  liFirstFire.QuadPart = -capture->hnsDefaultDevicePeriod / 2; // negative means relative time
-  LONG lTimeBetweenFires = (LONG)capture->hnsDefaultDevicePeriod / 2 / (10 * 1000); // convert to milliseconds
+  liFirstFire.QuadPart = -capture->mHhnsDefaultDevicePeriod / 2; // negative means relative time
+  LONG lTimeBetweenFires = (LONG)capture->mHhnsDefaultDevicePeriod / 2 / (10 * 1000); // convert to milliseconds
 
   if (!SetWaitableTimer (wakeUp, &liFirstFire, lTimeBetweenFires, NULL, NULL, FALSE)) {
     cLog::log (LOGERROR, "SetWaitableTimer failed: last error = %u", GetLastError());
@@ -371,12 +373,12 @@ static DWORD WINAPI captureThread (LPVOID param) {
   bool done = false;
   while (!done) {
     UINT32 packetSize;
-    capture->audioCaptureClient->GetNextPacketSize (&packetSize);
+    capture->mAudioCaptureClient->GetNextPacketSize (&packetSize);
     while (packetSize > 0) {
       BYTE* data;
       UINT32 numFramesRead;
       DWORD dwFlags;
-      if (FAILED (capture->audioCaptureClient->GetBuffer (&data, &numFramesRead, &dwFlags, NULL, NULL))) {
+      if (FAILED (capture->mAudioCaptureClient->GetBuffer (&data, &numFramesRead, &dwFlags, NULL, NULL))) {
         cLog::log (LOGERROR, "IAudioCaptureClient::GetBuffer failed");
         done = true;
         break;
@@ -399,13 +401,13 @@ static DWORD WINAPI captureThread (LPVOID param) {
         capture->mBipBuffer.commit (bytesAllocated);
         }
 
-      if (FAILED (capture->audioCaptureClient->ReleaseBuffer (numFramesRead))) {
+      if (FAILED (capture->mAudioCaptureClient->ReleaseBuffer (numFramesRead))) {
         cLog::log (LOGERROR, "audioCaptureClient::ReleaseBuffer failed");
         done = true;
         break;
         }
 
-      capture->audioCaptureClient->GetNextPacketSize (&packetSize);
+      capture->mAudioCaptureClient->GetNextPacketSize (&packetSize);
       }
 
     DWORD dwWaitResult = WaitForSingleObject (wakeUp, INFINITE);
@@ -448,6 +450,7 @@ int main() {
   CoInitialize (NULL);
 
   cCapture capture;
+  cWaveFile waveFile (capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
@@ -460,8 +463,6 @@ int main() {
 
   while (capture.mBipBuffer.getCommittedSize() == 0)
     Sleep (10);
-
-  cWaveFile waveFile (capture.mWaveFormatEx);
 
   FILE* aacFile = fopen ("out.aac", "wb");
 
@@ -534,20 +535,20 @@ int main() {
         }
       capture.mBipBuffer.decommitBlock (len);
 
-      if (avcodec_send_frame (encoderContext, frame) == 0)
-        while (avcodec_receive_packet (encoderContext, packet) == 0)
+      if (!avcodec_send_frame (encoderContext, frame))
+        while (!avcodec_receive_packet (encoderContext, packet))
           if (av_write_frame (outputFormatContext, packet) < 0) {
             done = true;
             break;
             }
       }
     else
-      Sleep (1);
+      Sleep (10);
     }
 
   // Flush cached packets
-  if (avcodec_send_frame (encoderContext, NULL) == 0)
-    while (avcodec_receive_packet (encoderContext, packet) == 0)
+  if (!avcodec_send_frame (encoderContext, NULL))
+    while (!avcodec_receive_packet (encoderContext, packet))
       if (av_write_frame (outputFormatContext, packet) < 0)
         break;
 
