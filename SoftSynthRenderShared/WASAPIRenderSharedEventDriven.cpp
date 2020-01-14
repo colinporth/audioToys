@@ -24,8 +24,8 @@
 //}}}
 
 int TargetLatency = 30;
-int TargetFrequency = 440;
-int TargetDurationInSec = 10;
+int TargetFrequency = 880;
+int TargetDurationInSec = 2;
 
 bool ShowHelp;
 bool UseConsoleDevice;
@@ -504,8 +504,8 @@ int wmain (int argc, wchar_t* argv[]) {
     pParams = new CSynthParameters();
     pParams->SetSamplesPerBlock (renderer->BufferSizePerPeriod());
     pParams->SetSampleRate (renderer->SamplesPerSecond());
-    pParams->SetMidiCh(0);
-    pParams->SetButtonChan(9);
+    pParams->SetMidiCh (0);
+    pParams->SetButtonChan (9);
     pSynth = new CSynthEngine (pParams, NULL);
     pSynth->Create (NULL);
 

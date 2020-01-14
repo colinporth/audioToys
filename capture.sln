@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29613.14
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sineAacAdts", "aacAdts.vcxproj", "{D5E40402-40F8-4CA2-AAA0-9A145F804F63}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WASAPIRenderSharedEventDriven", "SoftSynthRenderShared\WASAPIRenderSharedEventDriven.vcxproj", "{4BFD2960-09AA-43B4-A6F5-2B2C89AA19C5}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "capture", "capture\capture.vcxproj", "{B8217CD3-EB29-418C-A6D3-0845AAE0CA84}"
@@ -17,10 +15,6 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{D5E40402-40F8-4CA2-AAA0-9A145F804F63}.Debug|x64.ActiveCfg = Debug|x64
-		{D5E40402-40F8-4CA2-AAA0-9A145F804F63}.Debug|x64.Build.0 = Debug|x64
-		{D5E40402-40F8-4CA2-AAA0-9A145F804F63}.Release|x64.ActiveCfg = Release|x64
-		{D5E40402-40F8-4CA2-AAA0-9A145F804F63}.Release|x64.Build.0 = Release|x64
 		{4BFD2960-09AA-43B4-A6F5-2B2C89AA19C5}.Debug|x64.ActiveCfg = Debug|x64
 		{4BFD2960-09AA-43B4-A6F5-2B2C89AA19C5}.Debug|x64.Build.0 = Debug|x64
 		{4BFD2960-09AA-43B4-A6F5-2B2C89AA19C5}.Release|x64.ActiveCfg = Release|x64

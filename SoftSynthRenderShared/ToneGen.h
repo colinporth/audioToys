@@ -18,7 +18,7 @@
 template<typename T> T Convert(double Value);
 
 //{{{
-template <typename T> void GenerateSineSamples (DWORD Frequency, double* InitialTheta, 
+template <typename T> void GenerateSineSamples (DWORD Frequency, double* InitialTheta,
                                                 BYTE* Buffer, size_t BufferLength, WORD ChannelCount, DWORD SamplesPerSecond) {
 //  Generate samples which represent a sine wave that fits into the specified buffer.
 //  T:  Type of data holding the sample (short, int, byte, float)
@@ -34,7 +34,7 @@ template <typename T> void GenerateSineSamples (DWORD Frequency, double* Initial
   T* dataBuffer = reinterpret_cast<T*>(Buffer);
   for (size_t i = 0 ; i < BufferLength / sizeof(T) ; i += ChannelCount) {
     double sinValue = sin (theta);
-    for (size_t j = 0 ;j < ChannelCount; j++)
+    for (size_t j = 0 ; j < ChannelCount; j++)
       dataBuffer[i+j] = Convert<T>(sinValue);
     theta += sampleIncrement;
     }
