@@ -52,7 +52,7 @@ extern "C" {
 
 #define OUTPUT_CHANNELS 2
 #define OUTPUT_BIT_RATE 64000
-#define OUTPUT_SAMPLE_RATE 44100
+#define OUTPUT_SAMPLE_RATE 48000 // 44100
 
 /* Global timestamp for the audio frames. */
 static int64_t pts = 0;
@@ -406,7 +406,7 @@ int convert_samples (const uint8_t** input_data, const int input_frame_size,
 //{{{
 int read_decode_convert_and_store (AVAudioFifo* fifo,
                                    AVFormatContext* input_format_context, AVCodecContext* input_codec_context,
-                                   AVCodecContext* output_codec_context, 
+                                   AVCodecContext* output_codec_context,
                                    SwrContext* resampler_context,
                                    int* finished) {
 
@@ -437,6 +437,8 @@ int read_decode_convert_and_store (AVAudioFifo* fifo,
   if (data_present) {
     /* Initialize the temporary storage for the converted input samples. */
     const int converted_frame_size = input_frame->nb_samples;
+    // av_rescale_rnd (swr_get_delay(resampler_context, 48000) + in_samples, 44100, 48000, AV_ROUND_UP); ?????
+
     if (init_converted_samples (&convertedSamples, output_codec_context, converted_frame_size))
       goto cleanup;
 
