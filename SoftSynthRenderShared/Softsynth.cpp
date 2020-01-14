@@ -2,23 +2,28 @@
 #include "SynthCadDefines.h"
 #include <math.h>
 
-float NoteToBiLevel(int note)
+//{{{
+float NoteToBiLevel (int note)
 {
 	float level = float(note - 64) / float(64.0);
 	return level;
 
 }
-float NoteToLevel(int note)
+//}}}
+//{{{
+float NoteToLevel (int note)
 {
 	float level = float(note) / float(120.0);
 	return level;
 }
+//}}}
 
-float LevelToFreq(float level)
+//{{{
+float LevelToFreq (float level)
 {
 	///---------------------------------
 	/// LevelToFreq
-	///		This function converts a
+	///   This function converts a
 	/// level into its equivalent frequency
 	/// where c0 is 16.352Hz
 	///----------------------------------
@@ -27,16 +32,19 @@ float LevelToFreq(float level)
 	freq = float(16.352 * pow(TWELTHROOT2,level * 120.0));
 	return freq;
 }
-
-float FreqToLevel(float freq)
+//}}}
+//{{{
+float FreqToLevel (float freq)
 {
 	float Level;
 
-	Level =float( log(freq/16.352) / (log(TWELTHROOT2) * 120) );
+	Level = float( log(freq/16.352) / (log(TWELTHROOT2) * 120) );
 	return Level;
 }
+//}}}
 
-float Selector3(float x, float A, float B, float C)
+//{{{
+float Selector3 (float x, float A, float B, float C)
 {
 	float y1, y2, y3;
 	float o;
@@ -62,8 +70,9 @@ float Selector3(float x, float A, float B, float C)
 	o = A * y1 + B * y2 + C * y3;
 	return o;
 }
-
-float Selector(int n,float x, float *Inputs)
+//}}}
+//{{{
+float Selector (int n,float x, float *Inputs)
 {
 	float o = 0.0;
 	float y;
@@ -93,4 +102,4 @@ float Selector(int n,float x, float *Inputs)
 	}
 	return o;
 }
-
+//}}}

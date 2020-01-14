@@ -1,3 +1,4 @@
+//{{{  includes
 #include "stdafx.h"
 
 #include "SynthObject.h"
@@ -5,14 +6,15 @@
 #include "SynthAudioOut.h"
 
 #include <functiondiscoverykeys.h>
+//}}}
 
-
+//{{{
 UINT CSynthEngine::SynthEngWorker(LPVOID pD)
 {
 	//------------------------------------
 	// This message handler is used for
 	// dispatching messages among the various
-	// modules, until I can come up with a 
+	// modules, until I can come up with a
 	// better way to do it.
 	//------------------------------------
 	CSynthEngine *pSE = (CSynthEngine *)pD;
@@ -28,37 +30,37 @@ UINT CSynthEngine::SynthEngWorker(LPVOID pD)
 			case MSG_KILLTHREAD:
 				loop = 0;
 				break;
-			case WM_LK25_KNOB_1:	//Attack
+			case WM_LK25_KNOB_1:  //Attack
 				pSE->m_pA->SetData(NoteToBiLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_2:	//decay
+			case WM_LK25_KNOB_2:  //decay
 				pSE->m_pD->SetData(NoteToBiLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_3:	//sustain
+			case WM_LK25_KNOB_3:  //sustain
 				printf("Knob 1 %d  %d\n", message.wParam, message.lParam);
 				pSE->m_pS->SetData(NoteToLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_4:	//release
+			case WM_LK25_KNOB_4:  //release
 				pSE->m_pR->SetData(NoteToBiLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_5:	//filter Q	
+			case WM_LK25_KNOB_5:  //filter Q
 				pSE->m_pQ->SetData(NoteToLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_6:	//filter freq
+			case WM_LK25_KNOB_6:  //filter freq
 				pSE->m_pF->SetData(NoteToLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_7:	//Osc PWM
+			case WM_LK25_KNOB_7:  //Osc PWM
 				pSE->m_pPWM->SetData(NoteToLevel(message.lParam));
 				break;
-			case WM_LK25_KNOB_8:	//fiter ADSR atn
+			case WM_LK25_KNOB_8:  //fiter ADSR atn
 				pSE->m_pMixEVLevel->SetData(NoteToLevel(message.lParam));
 				break;
 			case WM_NOTE_ON:
 				pSE->m_pOscPitch->SetData(NoteToLevel(message.wParam));
-//				printf("Note On %d %d\n", message.wParam, message.lParam);
+//        printf("Note On %d %d\n", message.wParam, message.lParam);
 				break;
 			case WM_NOTE_OFF:
-//				printf("Note Off %d %d\n", message.wParam, message.lParam);
+//        printf("Note Off %d %d\n", message.wParam, message.lParam);
 				break;
 			case WM_ADSR_GATE:
 				if (message.wParam)
@@ -71,20 +73,18 @@ UINT CSynthEngine::SynthEngWorker(LPVOID pD)
 	}
 	return 0;
 }
+//}}}
 
-CSynthEngine::CSynthEngine(CSynthParameters *pParams, CSynthObject *pParent):CSynthObject(OBJECT_TYPE_ENGINE, pParams,pParent)
-{
-}
+CSynthEngine::CSynthEngine(CSynthParameters *pParams, CSynthObject *pParent) : 
+	CSynthObject(OBJECT_TYPE_ENGINE, pParams,pParent) {}
+CSynthEngine::~CSynthEngine() {}
 
-CSynthEngine::~CSynthEngine()
-{
-}
-
+//{{{
 float CSynthEngine::RunIt()
 {
 	//------------------------------------
 	// RunIt
-	//		Generates audio output
+	//    Generates audio output
 	//------------------------------------
 	float d=0.0;
 
@@ -102,7 +102,9 @@ float CSynthEngine::RunIt()
 	}
 	return d;
 }
+//}}}
 
+//{{{
 void CSynthEngine::GenerateSamples(BYTE *buff,int nSamples,int nCh, DWORD /*freq*/)
 {
 	float *databuff = (float *)buff;
@@ -116,14 +118,16 @@ void CSynthEngine::GenerateSamples(BYTE *buff,int nSamples,int nCh, DWORD /*freq
 			databuff[index++] = d;
 	}
 }
+//}}}
 
+//{{{
 bool CSynthEngine::Create( CSynthObject *pParent)
 {
 	Init();
-	
 	return CSynthObject::Create(pParent);
 }
-
+//}}}
+//{{{
 void CSynthEngine::Init()
 {
 	//---------------------------------
@@ -193,7 +197,7 @@ void CSynthEngine::Init()
 	m_pOsc1->SetPitch(m_pOscPitch);
 	m_pOscPitch->SetData(FreqToLevel(440));
 	m_pOsc1->SetWaveSel(m_pOscWaveSel);
-	m_pOscWaveSel->SetData((float)0.8);	//sine wave
+	m_pOscWaveSel->SetData((float)0.8); //sine wave
 	m_pOsc1->SetPW(m_pPWM);
 	//envelope generator
 	m_pEnv->SetAttack(m_pA);
@@ -224,20 +228,25 @@ void CSynthEngine::Init()
 	//-----------------------------
 	BeginThread();
 }
+//}}}
 
-
+//{{{
 void CSynthEngine::Stop()
 {
-//	m_pAudio->TerminateThread();
+//  m_pAudio->TerminateThread();
 	m_pMidiIn->KillThead();
 	TerminateThread();
 }
+//}}}
 
+//{{{
 void CSynthEngine::BeginThread()
 {
 	m_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)CSynthEngine::SynthEngWorker, (LPVOID)this, 0, NULL);
 	m_ThreadID = GetThreadId(m_hThread);
 }
+//}}}
+//{{{
 void CSynthEngine::TerminateThread()
 {
 	PostThreadMessageW(GetThreadId(m_hThread), MSG_KILLTHREAD, 0, 0);
@@ -249,23 +258,24 @@ void CSynthEngine::TerminateThread()
 		m_hThread = NULL;
 	}
 
-//	m_pSynthThread->PostThreadMessageW(MSG_KILLTHREAD, 0, 0);
-//	Sleep(1);
-//	DWORD dwExitCode;
-//	do
-//	{
-//		::GetExitCodeThread(m_pSynthThread->m_hThread, &dwExitCode);
-//		//--------------------------------------------------------
-//		// in order fot the exit code to change, we need to force
-//		// a context switch.  We do this by going to sleep for
-//		// zero milliseconds...I personally find this to be
-//		// klugey, but this is windows we are talking about here
-//		//--------------------------------------------------------
-//		Sleep(0L);
-//	} while (dwExitCode);
-//	if (dwExitCode == 0)	// Is The thread is still running.
-//	{
-//		delete m_pSynthThread;
-//	}
+//  m_pSynthThread->PostThreadMessageW(MSG_KILLTHREAD, 0, 0);
+//  Sleep(1);
+//  DWORD dwExitCode;
+//  do
+//  {
+//    ::GetExitCodeThread(m_pSynthThread->m_hThread, &dwExitCode);
+//    //--------------------------------------------------------
+//    // in order fot the exit code to change, we need to force
+//    // a context switch.  We do this by going to sleep for
+//    // zero milliseconds...I personally find this to be
+//    // klugey, but this is windows we are talking about here
+//    //--------------------------------------------------------
+//    Sleep(0L);
+//  } while (dwExitCode);
+//  if (dwExitCode == 0)  // Is The thread is still running.
+//  {
+//    delete m_pSynthThread;
+//  }
 
 }
+//}}}

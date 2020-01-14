@@ -268,7 +268,7 @@ public:
       if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
         cLog::log (LOGERROR, "cCapture MMDeviceEnumerator::GetDefaultAudioEndpoint failed");
 
-      mBipBuffer.allocateBuffer (1024 * 64);
+      mBipBuffer.allocateBuffer (0x100000); // 1mb
 
       if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&mAudioClient)))
         cLog::log (LOGERROR, "cCapture IMMDevice::Activate IAudioClient failed");
@@ -352,9 +352,9 @@ public:
           cLog::log (LOGINFO, "audioCaptureClient::GetBuffer silent %d", numFramesRead);
         else {
           if (dwFlags == AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY)
-            cLog::log (LOGINFO, "audioCaptureClient::GetBuffer discontinuity %d", numFramesRead);
+            cLog::log (LOGINFO, "audioCaptureClient::GetBuffer discontinuity");
 
-          cLog::log (LOGINFO2, "captured frames %d bytes:%d", numFramesRead, numFramesRead * mWaveFormatEx->nBlockAlign);
+          cLog::log (LOGINFO2, "captured frames:%d bytes:%d", numFramesRead, numFramesRead * mWaveFormatEx->nBlockAlign);
           LONG bytesToWrite = numFramesRead * mWaveFormatEx->nBlockAlign;
           int bytesAllocated = 0;
           uint8_t* ptr = mBipBuffer.reserve (bytesToWrite, bytesAllocated);

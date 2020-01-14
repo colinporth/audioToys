@@ -36,6 +36,7 @@ bool DisableMMCSS;
 CSynthEngine* pSynth = NULL;
 CSynthParameters* pParams = NULL;
 wchar_t* OutputEndpoint;
+
 RenderBuffer* renderQueue = NULL;
 RenderBuffer** currentBufferTail = &renderQueue;
 

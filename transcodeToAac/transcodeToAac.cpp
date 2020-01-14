@@ -51,8 +51,8 @@ extern "C" {
 //}}}
 
 #define OUTPUT_CHANNELS 2
-#define OUTPUT_BIT_RATE 64000
-#define OUTPUT_SAMPLE_RATE 48000 // 44100
+#define OUTPUT_BIT_RATE 128000
+#define OUTPUT_SAMPLE_RATE 44100
 
 /* Global timestamp for the audio frames. */
 static int64_t pts = 0;
@@ -162,9 +162,8 @@ int init_converted_samples (uint8_t*** convertedSamples, AVCodecContext* output_
 {
   int error;
 
-  /* Allocate as many pointers as there are audio channels.
-   * Each pointer will later point to the audio samples of the corresponding channels (although it may be NULL for interleaved formats).
-   */
+  // Allocate as many pointers as there are audio channels.
+  // Each pointer will later point to the audio samples of the corresponding channels (although it may be NULL for interleaved formats).
   if (!(*convertedSamples = (uint8_t**)calloc (output_codec_context->channels, sizeof(**convertedSamples)))) {
     fprintf(stderr, "Could not allocate converted input sample pointers\n");
     return AVERROR(ENOMEM);
@@ -355,6 +354,8 @@ int open_output_file (const char* filename, int sampleRate,
     codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
   /* Open the encoder for the audio stream to use it later. */
+  auto res = av_opt_set (codecContext->priv_data, "profile", "aac_he", 0);
+  printf ("setopt %x\n", res);
   avcodec_open2 (codecContext, output_codec, NULL);
   avcodec_parameters_from_context (stream->codecpar, codecContext);
 
@@ -436,8 +437,13 @@ int read_decode_convert_and_store (AVAudioFifo* fifo,
   /* If there is decoded data, convert and store it. */
   if (data_present) {
     /* Initialize the temporary storage for the converted input samples. */
-    const int converted_frame_size = input_frame->nb_samples;
-    // av_rescale_rnd (swr_get_delay(resampler_context, 48000) + in_samples, 44100, 48000, AV_ROUND_UP); ?????
+    auto delay = swr_get_delay (resampler_context, input_frame->sample_rate);
+    delay = 0; // dont use it
+    const int converted_frame_size = (int)av_rescale_rnd (
+      input_frame->nb_samples + delay, OUTPUT_SAMPLE_RATE, input_frame->sample_rate, AV_ROUND_DOWN);
+    printf ("inputSampleRate:%d from %d to %d unusedDelay:%lld\n",
+            input_frame->sample_rate, input_frame->nb_samples, converted_frame_size,
+            swr_get_delay (resampler_context, input_frame->sample_rate));
 
     if (init_converted_samples (&convertedSamples, output_codec_context, converted_frame_size))
       goto cleanup;
@@ -601,7 +607,7 @@ int main (int argc, char **argv) {
     goto cleanup;
 
   /* Open the output file for writing. */
-  if (open_output_file (outFilename, input_codec_context->sample_rate, &output_format_context, &output_codec_context))
+  if (open_output_file (outFilename, OUTPUT_SAMPLE_RATE, &output_format_context, &output_codec_context))
     goto cleanup;
 
   /* Initialize the resampler to be able to convert audio sample formats. */
