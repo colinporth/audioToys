@@ -36,11 +36,12 @@ public:
 	//  Public interface to CWASAPIRenderer.
 	enum RenderSampleType { SampleTypeFloat, SampleType16BitPCM, };
 
-	CWASAPIRenderer(IMMDevice *Endpoint, bool EnableStreamSwitch, ERole EndpointRole);
-	bool Initialize(UINT32 EngineLatency);
+	CWASAPIRenderer (IMMDevice *Endpoint, bool EnableStreamSwitch, ERole EndpointRole);
+	bool Initialize (UINT32 EngineLatency);
 	void Shutdown();
-	bool Start(RenderBuffer *RenderBufferQueue);
+	bool Start (RenderBuffer *RenderBufferQueue);
 	void Stop();
+
 	WORD ChannelCount() { return _MixFormat->nChannels; }
 	UINT32 SamplesPerSecond() { return _MixFormat->nSamplesPerSec; }
 	UINT32 BytesPerSample() { return _MixFormat->wBitsPerSample / 8; }
@@ -52,7 +53,7 @@ public:
 	STDMETHOD_(ULONG, Release)();
 
 private:
-	~CWASAPIRenderer(void);
+	~CWASAPIRenderer();
 
 	LONG    _RefCount;
 
@@ -89,21 +90,21 @@ private:
 	void TerminateStreamSwitch();
 	bool HandleStreamSwitchEvent();
 
-	STDMETHOD(OnDisplayNameChanged) (LPCWSTR /*NewDisplayName*/, LPCGUID /*EventContext*/) { return S_OK; };
-	STDMETHOD(OnIconPathChanged) (LPCWSTR /*NewIconPath*/, LPCGUID /*EventContext*/) { return S_OK; };
-	STDMETHOD(OnSimpleVolumeChanged) (float /*NewSimpleVolume*/, BOOL /*NewMute*/, LPCGUID /*EventContext*/) { return S_OK; }
-	STDMETHOD(OnChannelVolumeChanged) (DWORD /*ChannelCount*/, float /*NewChannelVolumes*/[], DWORD /*ChangedChannel*/, LPCGUID /*EventContext*/) { return S_OK; };
-	STDMETHOD(OnGroupingParamChanged) (LPCGUID /*NewGroupingParam*/, LPCGUID /*EventContext*/) {return S_OK; };
-	STDMETHOD(OnStateChanged) (AudioSessionState /*NewState*/) { return S_OK; };
-	STDMETHOD(OnSessionDisconnected) (AudioSessionDisconnectReason DisconnectReason);
-	STDMETHOD(OnDeviceStateChanged) (LPCWSTR /*DeviceId*/, DWORD /*NewState*/) { return S_OK; }
-	STDMETHOD(OnDeviceAdded) (LPCWSTR /*DeviceId*/) { return S_OK; };
-	STDMETHOD(OnDeviceRemoved) (LPCWSTR /*DeviceId(*/) { return S_OK; };
-	STDMETHOD(OnDefaultDeviceChanged) (EDataFlow Flow, ERole Role, LPCWSTR NewDefaultDeviceId);
-	STDMETHOD(OnPropertyValueChanged) (LPCWSTR /*DeviceId*/, const PROPERTYKEY /*Key*/){return S_OK; };
+	STDMETHOD (OnDisplayNameChanged) (LPCWSTR /*NewDisplayName*/, LPCGUID /*EventContext*/) { return S_OK; };
+	STDMETHOD (OnIconPathChanged) (LPCWSTR /*NewIconPath*/, LPCGUID /*EventContext*/) { return S_OK; };
+	STDMETHOD (OnSimpleVolumeChanged) (float /*NewSimpleVolume*/, BOOL /*NewMute*/, LPCGUID /*EventContext*/) { return S_OK; }
+	STDMETHOD (OnChannelVolumeChanged) (DWORD /*ChannelCount*/, float /*NewChannelVolumes*/[], DWORD /*ChangedChannel*/, LPCGUID /*EventContext*/) { return S_OK; };
+	STDMETHOD (OnGroupingParamChanged) (LPCGUID /*NewGroupingParam*/, LPCGUID /*EventContext*/) {return S_OK; };
+	STDMETHOD (OnStateChanged) (AudioSessionState /*NewState*/) { return S_OK; };
+	STDMETHOD (OnSessionDisconnected) (AudioSessionDisconnectReason DisconnectReason);
+	STDMETHOD (OnDeviceStateChanged) (LPCWSTR /*DeviceId*/, DWORD /*NewState*/) { return S_OK; }
+	STDMETHOD (OnDeviceAdded) (LPCWSTR /*DeviceId*/) { return S_OK; };
+	STDMETHOD (OnDeviceRemoved) (LPCWSTR /*DeviceId(*/) { return S_OK; };
+	STDMETHOD (OnDefaultDeviceChanged) (EDataFlow Flow, ERole Role, LPCWSTR NewDefaultDeviceId);
+	STDMETHOD (OnPropertyValueChanged) (LPCWSTR /*DeviceId*/, const PROPERTYKEY /*Key*/){return S_OK; };
 
 	//  IUnknown
-	STDMETHOD(QueryInterface)(REFIID iid, void **pvObject);
+	STDMETHOD (QueryInterface)(REFIID iid, void **pvObject);
 
 	//  Utility functions.
 	bool CalculateMixFormatType();

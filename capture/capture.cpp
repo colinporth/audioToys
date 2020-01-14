@@ -452,7 +452,7 @@ int main() {
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
   cCapture capture;
-  cWavFile wavFile ("E:/Capture/out.wav", capture.mWaveFormatEx);
+  cWavFile wavFile ("D:/Capture/out.wav", capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
