@@ -1,0 +1,99 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+    </Filter>
+    <Filter Include="h">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Softsynth.cpp" />
+    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="SynthAudioOut.cpp" />
+    <ClCompile Include="SynthBiQuad.cpp" />
+    <ClCompile Include="synthbiquad_ii.cpp" />
+    <ClCompile Include="SynthDataPath.cpp" />
+    <ClCompile Include="SynthEGadsr.cpp" />
+    <ClCompile Include="SynthEngine.cpp" />
+    <ClCompile Include="SynthGlide.cpp" />
+    <ClCompile Include="SynthMidiIN.cpp" />
+    <ClCompile Include="SynthMixer.cpp" />
+    <ClCompile Include="SynthObject.cpp" />
+    <ClCompile Include="SynthParameters.cpp" />
+    <ClCompile Include="SynthPolyBLEPOsc.cpp" />
+    <ClCompile Include="SynthReverb1.cpp" />
+    <ClCompile Include="SynthSVFilter.cpp" />
+    <ClCompile Include="SynthVCA.cpp" />
+    <ClCompile Include="WASAPIRenderer.cpp" />
+    <ClCompile Include="WASAPIRenderSharedEventDriven.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="ToneGen.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="WASAPIRenderer.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthBiQuad.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="synthbiquad_ii.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthCadDefines.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthDataPath.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthEGadsr.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthEngine.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthGlide.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthMidiIN.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthMixer.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthObject.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthObjectTypes.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthParameters.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthPolyBLEPOsc.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthReverb1.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthSVFilter.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthVCA.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="SynthAudioOut.h">
+      <Filter>h</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
