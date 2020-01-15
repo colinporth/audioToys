@@ -19,7 +19,11 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\shared\utils\cLog.cpp" />
     <ClCompile Include="transcodeToAac.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\shared\utils\cLog.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{16ADE44C-F4FC-4829-91D8-C5812021D784}</ProjectGuid>
