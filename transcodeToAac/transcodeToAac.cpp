@@ -224,17 +224,17 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
 //}}}
 //{{{
 bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
-                                 AVFormatContext* inFormatContext, AVCodecContext* inCodecContext,
-                                 AVCodecContext* outCodecContext,
-                                 SwrContext* swrContext,
-                                 bool& done) {
+                                          AVFormatContext* inFormatContext, AVCodecContext* inCodecContext,
+                                          AVCodecContext* outCodecContext,
+                                          SwrContext* swrContext,
+                                          bool& done) {
 
   bool ok = false;
   uint8_t** convertedSamples = NULL;
 
   // Initialize temporary storage for one input frame, decode it
-  AVFrame* input_frame = av_frame_alloc();
-  if (!input_frame) {
+  AVFrame* frame = av_frame_alloc();
+  if (!frame) {
     //{{{
     fprintf(stderr, "Could not allocate input frame\n");
     goto cleanup;
@@ -242,7 +242,7 @@ bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
     //}}}
 
   bool hasData;
-  if (!decodeFrame (input_frame, inFormatContext, inCodecContext, hasData, done))
+  if (!decodeFrame (frame, inFormatContext, inCodecContext, hasData, done))
     goto cleanup;
 
   // If at EOF and no more samples in decoder delayed, we are actually don but not an error
@@ -251,10 +251,10 @@ bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
     if (hasData) {
       // calc max size for converted frame samples
       int convertedFrameSize = (int)av_rescale_rnd (
-        input_frame->nb_samples + swr_get_delay (swrContext, input_frame->sample_rate),
-                                                 OUTPUT_SAMPLE_RATE, input_frame->sample_rate, AV_ROUND_UP);
+        frame->nb_samples + swr_get_delay (swrContext, frame->sample_rate),
+        OUTPUT_SAMPLE_RATE, frame->sample_rate, AV_ROUND_UP);
 
-      // Allocate audio channel pointers, may point to planar data per channel, NULL if interleaved
+      // Allocate channel pointers, may point to planar data per channel, NULL if interleaved
       convertedSamples = (uint8_t**)calloc (outCodecContext->channels, sizeof(convertedSamples));
 
       // Allocate memory for the samples of all channels in one consecutive block for convenience. */
@@ -264,7 +264,7 @@ bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
       // Convert input samples to output sample format.
       convertedFrameSize = swr_convert (swrContext,
                                         convertedSamples, convertedFrameSize,
-                                        (const uint8_t**)input_frame->extended_data, input_frame->nb_samples);
+                                        (const uint8_t**)frame->extended_data, frame->nb_samples);
       if (convertedFrameSize < 0) {
         //{{{
         fprintf (stderr, "Could not convert input samples\n");
@@ -273,7 +273,7 @@ bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
         //}}}
 
       printf ("converted inputSampleRate:%d from %d to %d\n",
-              input_frame->sample_rate, input_frame->nb_samples, convertedFrameSize);
+              frame->sample_rate, frame->nb_samples, convertedFrameSize);
 
       // extend fifo to converted samples, and store them
       if (av_audio_fifo_realloc (fifo, av_audio_fifo_size (fifo) + convertedFrameSize) < 0) {
@@ -290,7 +290,6 @@ bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
         //}}}
       }
     }
-
   ok = true;
 
 cleanup:
@@ -299,7 +298,7 @@ cleanup:
     free (convertedSamples);
     }
 
-  av_frame_free (&input_frame);
+  av_frame_free (&frame);
   return ok;
   }
 //}}}
@@ -381,48 +380,48 @@ bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormat
   // Set the frame's parameters, especially its size and format.
   // av_frame_get_buffer needs this to allocate memory for the audio samples of the frame.
   // Default channel layouts based on the number of channels are assumed for simplicity
-  AVFrame* output_frame = av_frame_alloc();
-  if (!output_frame) {
+  AVFrame* frame = av_frame_alloc();
+  if (!frame) {
     //{{{
     fprintf (stderr, "Could not allocate output frame\n");
     return false;
     }
     //}}}
-  output_frame->nb_samples = frame_size;
-  output_frame->channel_layout = outCodecContext->channel_layout;
-  output_frame->format = outCodecContext->sample_fmt;
-  output_frame->sample_rate = outCodecContext->sample_rate;
+
+  frame->nb_samples = frame_size;
+  frame->channel_layout = outCodecContext->channel_layout;
+  frame->format = outCodecContext->sample_fmt;
+  frame->sample_rate = outCodecContext->sample_rate;
 
   // Allocate the samples of the created frame. This call will make
   // sure that the audio frame can hold as many samples as specified
-  int error = av_frame_get_buffer (output_frame, 0);
+  int error = av_frame_get_buffer (frame, 0);
   if (error < 0) {
     //{{{
     fprintf (stderr, "Could not allocate output frame samples\n");
-    av_frame_free (&output_frame);
+    av_frame_free (&frame);
     return false;
     }
     //}}}
 
   // Read as many samples from the FIFO buffer as required to fill the frame.
   // The samples are stored in the frame temporarily
-  if (av_audio_fifo_read (fifo, (void**)output_frame->data, frame_size) < frame_size) {
+  if (av_audio_fifo_read (fifo, (void**)frame->data, frame_size) < frame_size) {
     //{{{
     fprintf (stderr, "Could not read data from FIFO\n");
-    av_frame_free (&output_frame);
+    av_frame_free (&frame);
     return false;
     }
     //}}}
 
   // Encode one frame worth of audio samples
   bool hasData = false;
-  if (!encodeFrame (output_frame, outFormatContext, outCodecContext, hasData)) {
-    av_frame_free (&output_frame);
+  if (!encodeFrame (frame, outFormatContext, outCodecContext, hasData)) {
+    av_frame_free (&frame);
     return false;
     }
 
-  av_frame_free (&output_frame);
-
+  av_frame_free (&frame);
   return true;
   }
 //}}}
