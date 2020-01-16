@@ -23,18 +23,15 @@ extern "C" {
   }
 
 #include "../../shared/utils/cLog.h"
-#include "../../shared/utils/cBipBuffer.h"
 //}}}
 
-#define CHANNELS 2
-#define SAMPLE_RATE 48000
-#define ENCODER_BITRATE 128000
+const int kCaptureChannnels = 2;
 
 //{{{
-class cWavFile {
+class cWavWriteFile {
 public:
   //{{{
-  cWavFile (char* filename, WAVEFORMATEX* waveFormatEx) {
+  cWavWriteFile (char* filename, WAVEFORMATEX* waveFormatEx) {
 
     mFilename = (char*)malloc (strlen (filename));
     strcpy (mFilename, filename);
@@ -42,19 +39,20 @@ public:
     }
   //}}}
   //{{{
-  ~cWavFile() {
+  ~cWavWriteFile() {
     finish();
     }
   //}}}
 
   bool getOk() { return mOk; }
   //{{{
-  void write (void* data, LONG bytesToWrite) {
+  void write (float* data, int numSamples) {
 
+    LONG bytesToWrite = numSamples * mBlockAlign;
     auto bytesWritten = mmioWrite (file, reinterpret_cast<PCHAR>(data), bytesToWrite);
 
     if (bytesWritten == bytesToWrite)
-      framesWritten +=  bytesToWrite/ mBlockAlign;
+      framesWritten +=  bytesToWrite / mBlockAlign;
     else
       cLog::log (LOGERROR, "mmioWrite failed - wrote only %u of %u bytes", bytesWritten, bytesToWrite);
     }
@@ -249,12 +247,176 @@ private:
   int framesWritten = 0;
   };
 //}}}
-
 //{{{
-class cCapture {
+class cAacWriteFile {
 public:
   //{{{
-  cCapture() {
+  cAacWriteFile (char* filename, int channels, int sampleRate, int bitRate) {
+
+  #define OUTPUT_CHANNELS 2
+  #define OUTPUT_BIT_RATE 128000
+  #define OUTPUT_SAMPLE_RATE 48000
+
+    if (openOutFile (filename, channels, sampleRate, bitRate))
+      if (avformat_write_header (mFormatContext, NULL) < 0)
+        mOk = true;
+    }
+  //}}}
+  //{{{
+  ~cAacWriteFile() {
+
+    bool flushingEncoder = true;
+    while (flushingEncoder)
+      encodeFrame (NULL, flushingEncoder);
+
+    av_write_trailer (mFormatContext);
+    }
+  //}}}
+
+  bool getOk() { return mOk; }
+
+  int getChannels() { return mCodecContext->channels; }
+  int getSampleRate() { return mCodecContext->sample_rate; }
+  int getBitRate() { return (int)mCodecContext->bit_rate; }
+  int getFrameSize() { return mCodecContext->frame_size; }
+
+  //{{{
+  void write (float* ptr, int numSamples) {
+
+    AVFrame* frame = av_frame_alloc();
+    frame->nb_samples = mCodecContext->frame_size;
+    frame->channel_layout = mCodecContext->channel_layout;
+    frame->format = mCodecContext->sample_fmt;
+    frame->sample_rate = mCodecContext->sample_rate;
+    av_frame_get_buffer (frame, 0);
+
+    auto samplesL = (float*)frame->data[0];
+    auto samplesR = (float*)frame->data[1];
+    for (int i = 0; i < getFrameSize(); i++) {
+      *samplesL++ = *ptr++;
+      *samplesR++ = *ptr++;
+      }
+
+    bool hasData;
+    encodeFrame (frame, hasData);
+    av_frame_free (&frame);
+    }
+  //}}}
+
+private:
+  //{{{
+  bool openOutFile (const char* filename, int channels, int sampleRate, int bitRate) {
+
+    // Find the encoder to be used by its name
+    AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
+    mCodecContext = avcodec_alloc_context3 (codec);
+
+    // Set the basic encoder parameters, input file's sample rate is used to avoid a sample rate conversion
+    mCodecContext->channels = channels;
+    mCodecContext->channel_layout = av_get_default_channel_layout (OUTPUT_CHANNELS);
+    mCodecContext->sample_rate = sampleRate;
+    mCodecContext->sample_fmt = codec->sample_fmts[0];
+    mCodecContext->bit_rate = bitRate;
+    mCodecContext->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+
+    // Open the output file to write to it. */
+    AVIOContext* ioContext;
+    int error = avio_open (&ioContext, filename, AVIO_FLAG_WRITE);
+
+    // Create a new format context for the output container format
+    mFormatContext = avformat_alloc_context();
+    mFormatContext->pb = ioContext;
+    mFormatContext->oformat = av_guess_format (NULL, filename, NULL);
+
+    // Create a new audio stream in the output file container. */
+    AVStream* stream = avformat_new_stream (mFormatContext, NULL);
+    stream->time_base.den = OUTPUT_SAMPLE_RATE;
+    stream->time_base.num = 1;
+
+    // Some container formats (like MP4) require global headers to be present
+    // Mark the encoder so that it behaves accordingly
+    if (mFormatContext->oformat->flags & AVFMT_GLOBALHEADER)
+      mCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    // Open the encoder for the audio stream to use it later
+    //auto res = av_opt_set (codecContext->priv_data, "profile", "aac_he", 0);
+    //printf ("setopt %x", res);
+    error = avcodec_open2 (mCodecContext, codec, NULL);
+    error = avcodec_parameters_from_context (stream->codecpar, mCodecContext);
+
+    return true;
+    }
+  //}}}
+  //{{{
+  bool encodeFrame (AVFrame* frame, bool& hasData) {
+
+    bool ok = false;
+    hasData = false;
+
+    // Packet used for temporary storage
+    AVPacket output_packet;
+    av_init_packet (&output_packet);
+    output_packet.data = NULL;
+    output_packet.size = 0;
+
+    // Set a timestamp based on the sample rate for the container
+    if (frame) {
+      frame->pts = mPts;
+      mPts += frame->nb_samples;
+      }
+
+    // Send the audio frame stored in the temporary packet to the encoder
+    // The output audio stream encoder is used to do this The encoder signals that it has nothing more to encode
+    int error = avcodec_send_frame (mCodecContext, frame);
+    if (error == AVERROR_EOF) {
+      ok = true;
+      goto cleanup;
+      }
+    else if (error < 0) {
+      cLog::log (LOGERROR, "error send packet for encoding");
+      goto cleanup;
+      }
+
+    // Receive one encoded frame from the encoder
+    // If the encoder asks for more data to be able to provide an encoded frame, return indicating that no data is present
+    error = avcodec_receive_packet (mCodecContext, &output_packet);
+    if (error == AVERROR(EAGAIN))
+      ok = true;
+    else if (error == AVERROR_EOF)
+      ok = true;
+    else if (error < 0)
+      cLog::log (LOGERROR, "error encode frame");
+    else {
+      ok = true;
+      hasData = true;
+      }
+
+    // Write one audio frame from the temporary packet to the output file
+    if (hasData)
+      if (av_write_frame (mFormatContext, &output_packet) < 0) {
+        ok = false;
+        cLog::log (LOGERROR, "error write frame");
+        }
+
+  cleanup:
+    av_packet_unref (&output_packet);
+    return ok;
+    }
+  //}}}
+
+  AVCodecContext* mCodecContext = NULL;
+  AVFormatContext* mFormatContext = NULL;
+
+  bool mOk = false;
+
+  int64_t mPts = 0;
+  };
+//}}}
+//{{{
+class cCaptureWASAPI {
+public:
+  //{{{
+  cCaptureWASAPI() {
 
     // activate a device enumerator
     IMMDeviceEnumerator* pMMDeviceEnumerator = NULL;
@@ -267,8 +429,6 @@ public:
       // get default render endpoint
       if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
         cLog::log (LOGERROR, "cCapture MMDeviceEnumerator::GetDefaultAudioEndpoint failed");
-
-      mBipBuffer.allocateBuffer (0x100000); // 1mb
 
       if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&mAudioClient)))
         cLog::log (LOGERROR, "cCapture IMMDevice::Activate IAudioClient failed");
@@ -295,11 +455,17 @@ public:
 
       if (pMMDeviceEnumerator)
         pMMDeviceEnumerator->Release();
+
+      // simple 1Gb big linear buffer for now
+      mStreamFirst = (float*)malloc (0x40000000);
+      mStreamLast = mStreamFirst + (0x40000000 / 4);
+      mStreamReadPtr = mStreamFirst;
+      mStreamWritePtr = mStreamFirst;
       }
     }
   //}}}
   //{{{
-  ~cCapture() {
+  ~cCaptureWASAPI() {
 
     if (mAudioClient) {
       mAudioClient->Stop();
@@ -314,6 +480,22 @@ public:
 
     if (mMMDevice)
       mMMDevice->Release();
+
+    free (mStreamFirst);
+    }
+  //}}}
+
+  //{{{
+  float* getFrame (int frameSize) {
+  // get frameSize worth of floats if available
+
+    if (mStreamWritePtr - mStreamReadPtr >= frameSize * kCaptureChannnels) {
+      auto ptr = mStreamReadPtr;
+      mStreamReadPtr += frameSize * kCaptureChannnels;
+      return ptr;
+      }
+    else
+      return nullptr;
     }
   //}}}
 
@@ -354,16 +536,9 @@ public:
           if (dwFlags == AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY)
             cLog::log (LOGINFO, "audioCaptureClient::GetBuffer discontinuity");
 
-          cLog::log (LOGINFO2, "captured frames:%d bytes:%d", numFramesRead, numFramesRead * mWaveFormatEx->nBlockAlign);
-          LONG bytesToWrite = numFramesRead * mWaveFormatEx->nBlockAlign;
-          int bytesAllocated = 0;
-          uint8_t* ptr = mBipBuffer.reserve (bytesToWrite, bytesAllocated);
-          if (ptr && (bytesAllocated == bytesToWrite)) {
-            memcpy (ptr, data, bytesAllocated);
-            mBipBuffer.commit (bytesAllocated);
-            }
-          else
-            cLog::log (LOGERROR, "captureThread buffer full on write %d of  %d", bytesAllocated, bytesToWrite);
+          //cLog::log (LOGINFO, "captured frames:%d bytes:%d", numFramesRead, numFramesRead * mWaveFormatEx->nBlockAlign);
+          memcpy (mStreamWritePtr, data, numFramesRead * mWaveFormatEx->nBlockAlign);
+          mStreamWritePtr += numFramesRead * kCaptureChannnels;
           }
 
         if (FAILED (mAudioCaptureClient->ReleaseBuffer (numFramesRead))) {
@@ -393,15 +568,17 @@ public:
 
   WAVEFORMATEX* mWaveFormatEx = NULL;
 
-  cBipBuffer mBipBuffer;
-  float mMaxSampleValue = 0.f;
-
 private:
   IMMDevice* mMMDevice = NULL;
 
   IAudioClient* mAudioClient = NULL;
   IAudioCaptureClient* mAudioCaptureClient = NULL;
   REFERENCE_TIME mHhnsDefaultDevicePeriod;
+
+  float* mStreamFirst = nullptr;
+  float* mStreamLast = nullptr;
+  float* mStreamReadPtr = nullptr;
+  float* mStreamWritePtr = nullptr;
   };
 //}}}
 //{{{
@@ -429,22 +606,45 @@ DWORD WINAPI captureThread (LPVOID param) {
 //}}}
 
 //{{{
-int writeDataCallback (void* file, uint8_t* data, int size) {
-
-  fwrite (data, 1, size, (FILE*)file);
-  return size;
-  }
-//}}}
-//{{{
 void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
 
-  char str[256];
-  vsnprintf (str, 256, fmt, vargs);
+  char str[100];
+  vsnprintf (str, 100, fmt, vargs);
+
+  // trim trailing return
   auto len = strlen (str);
   if (len > 0)
     str[len-1] = 0;
 
-  cLog::log (LOGINFO, str);
+  switch (level) {
+    case AV_LOG_PANIC:
+      cLog::log (LOGERROR,   "ffmpeg Panic - %s", str);
+      break;
+    case AV_LOG_FATAL:
+      cLog::log (LOGERROR,   "ffmpeg Fatal - %s ", str);
+      break;
+    case AV_LOG_ERROR:
+      cLog::log (LOGERROR,   "ffmpeg Error - %s ", str);
+      break;
+    case AV_LOG_WARNING:
+      cLog::log (LOGNOTICE,  "ffmpeg Warn  - %s ", str);
+      break;
+    case AV_LOG_INFO:
+      cLog::log (LOGINFO,    "ffmpeg Info  - %s ", str);
+      break;
+    case AV_LOG_VERBOSE:
+      cLog::log (LOGINFO,    "ffmpeg Verbo - %s ", str);
+      break;
+    case AV_LOG_DEBUG:
+      cLog::log (LOGINFO,    "ffmpeg Debug - %s ", str);
+      break;
+    case AV_LOG_TRACE:
+      cLog::log (LOGINFO,    "ffmpeg Trace - %s ", str);
+      break;
+    default :
+      cLog::log (LOGERROR,   "ffmpeg ????? - %s ", str);
+      break;
+    }
   }
 //}}}
 //{{{
@@ -453,13 +653,14 @@ int main() {
   cLog::init (LOGINFO, false, "");
   cLog::log (LOGNOTICE, "capture");
 
-  //av_log_set_level (AV_LOG_VERBOSE);
+  av_log_set_level (AV_LOG_VERBOSE);
   av_log_set_callback (avLogCallback);
 
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
-  cCapture capture;
-  cWavFile wavFile ("D:/Capture/out.wav", capture.mWaveFormatEx);
+  cCaptureWASAPI capture;
+  cAacWriteFile aacFile ("D:/Capture/out.aac", kCaptureChannnels, 48000, 128000);
+  cWavWriteFile wavFile ("D:/Capture/out.wav", capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
@@ -470,114 +671,19 @@ int main() {
     }
     //}}}
 
-  while (capture.mBipBuffer.getCommittedSize() == 0)
-    Sleep (10);
+  const int frameSize = aacFile.getFrameSize();
+  cLog::log (LOGINFO, "capture and encode with frameSize:%d", frameSize);
 
-  FILE* aacFile = fopen ("out.aac", "wb");
-
-  AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
-
-  AVCodecContext* encoderContext = avcodec_alloc_context3 (codec);
-  encoderContext->sample_fmt = AV_SAMPLE_FMT_FLTP;
-  encoderContext->bit_rate = ENCODER_BITRATE;
-  encoderContext->sample_rate = SAMPLE_RATE;
-  encoderContext->channels = CHANNELS;
-  encoderContext->channel_layout = av_get_default_channel_layout (CHANNELS);
-  encoderContext->time_base.num = 1;
-  encoderContext->time_base.den = SAMPLE_RATE;
-  encoderContext->codec_type = AVMEDIA_TYPE_AUDIO;
-  avcodec_open2 (encoderContext, codec, NULL);
-
-  // create ADTS container for encoded frames
-  AVOutputFormat* outputFormat = av_guess_format ("adts", NULL, NULL);
-  AVFormatContext* outputFormatContext = NULL;
-  avformat_alloc_output_context2 (&outputFormatContext, outputFormat, "", NULL);
-
-  // create ioContext for adts container with writeData callback
-  int outBufferSize = 4096;
-  uint8_t* outBuffer = (uint8_t*)av_malloc (outBufferSize);
-  AVIOContext* ioContext = avio_alloc_context (outBuffer, outBufferSize, 1, aacFile, NULL, &writeDataCallback, NULL);
-
-  // link container's context to the previous I/O context
-  outputFormatContext->pb = ioContext;
-  AVStream* adts_stream = avformat_new_stream (outputFormatContext, NULL);
-  adts_stream->id = outputFormatContext->nb_streams-1;
-
-  // copy encoder's parameters
-  avcodec_parameters_from_context (adts_stream->codecpar, encoderContext);
-
-  // allocate stream private data and write the stream header
-  avformat_write_header (outputFormatContext, NULL);
-
-  // allocate an frame to be filled with input data.
-  AVFrame* frame = av_frame_alloc();
-  frame->format = AV_SAMPLE_FMT_FLTP;
-  frame->channels = CHANNELS;
-  frame->nb_samples = encoderContext->frame_size;
-  frame->sample_rate = SAMPLE_RATE;
-  frame->channel_layout = av_get_default_channel_layout (CHANNELS);
-
-  cLog::log (LOGINFO, "frame_size %d", encoderContext->frame_size);
-
-  // allocate the frame's data buffer
-  av_frame_get_buffer (frame, 0);
-
-  AVPacket* packet = av_packet_alloc();
-
-  float lastMaxSampleValue = 0.f;
-  bool done = false;
-  while (!done) {
-    int bytes = encoderContext->frame_size;
-    auto ptr = (float*)capture.mBipBuffer.getContiguousBlock (bytes);
-
-    if (bytes >= encoderContext->frame_size) {
+  while (true) {
+    auto framePtr = capture.getFrame (frameSize);
+    if (framePtr) {
       // enough data to encode
-      cLog::log (LOGINFO1, "encode read block frame_size bytes:%d", bytes);
-
-      wavFile.write (ptr, bytes);
-
-      // float32 interleaved to float32 planar
-      auto samplesL = (float*)frame->data[0];
-      auto samplesR = (float*)frame->data[1];
-      for (auto sample = 0; sample < encoderContext->frame_size; sample++) {
-        capture.mMaxSampleValue = max (capture.mMaxSampleValue, abs(*ptr));
-        samplesL[sample] = *ptr++;
-        capture.mMaxSampleValue = max (capture.mMaxSampleValue, abs(*ptr));
-        samplesR[sample] = *ptr++;
-        }
-      capture.mBipBuffer.decommitBlock (bytes);
-
-      if (!avcodec_send_frame (encoderContext, frame))
-        while (!avcodec_receive_packet (encoderContext, packet))
-          if (av_write_frame (outputFormatContext, packet) < 0) {
-            done = true;
-            break;
-            }
-
-      if (capture.mMaxSampleValue > lastMaxSampleValue) {
-        cLog::log (LOGINFO, "new max %6.4f", capture.mMaxSampleValue);
-        lastMaxSampleValue = capture.mMaxSampleValue;
-        }
+      wavFile.write (framePtr, frameSize);
+      aacFile.write (framePtr, frameSize);
       }
     else
       Sleep (10);
     }
-
-  // Flush cached packets
-  if (!avcodec_send_frame (encoderContext, NULL))
-    while (!avcodec_receive_packet (encoderContext, packet))
-      if (av_write_frame (outputFormatContext, packet) < 0)
-        break;
-
-  av_write_trailer (outputFormatContext);
-  fclose (aacFile);
-
-  avcodec_free_context (&encoderContext);
-  av_frame_free (&frame);
-  avformat_free_context (outputFormatContext);
-  av_freep (&ioContext);
-  av_freep (&outBuffer);
-  av_packet_free (&packet);
 
   CloseHandle (hThread);
   CoUninitialize();

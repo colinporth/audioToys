@@ -41,6 +41,7 @@ extern "C" {
   #include "libswresample/swresample.h"
   }
 
+#include "../../shared/utils/utils.h"
 #include "../../shared/utils/cLog.h"
 #include "../../shared/utils/cBipBuffer.h"
 //}}}
@@ -52,71 +53,71 @@ extern "C" {
 static int64_t pts = 0;
 
 //{{{
-bool openInFile (const char* filename, AVFormatContext*& inFormatContext, AVCodecContext*& inCodecContext) {
+bool openInFile (const char* filename, AVFormatContext*& formatContext, AVCodecContext*& codecContext) {
 
   // Open the input file to read from it. */
-  int error = avformat_open_input (&inFormatContext, filename, NULL, NULL);
+  int error = avformat_open_input (&formatContext, filename, NULL, NULL);
   if (error < 0) {
     //{{{
     cLog::log (LOGERROR, "Could not open input file");
-    inFormatContext = NULL;
+    formatContext = NULL;
     return false;
     }
     //}}}
 
   // Get information on the input file (number of streams etc.). */
-  error = avformat_find_stream_info (inFormatContext, NULL);
+  error = avformat_find_stream_info (formatContext, NULL);
   if (error < 0) {
     //{{{
     cLog::log (LOGINFO, "Could not open find stream info");
-    avformat_close_input (&inFormatContext);
+    avformat_close_input (&formatContext);
     return false;
     }
     //}}}
 
   // Make sure that there is only one stream in the input file. */
-  if (inFormatContext->nb_streams != 1) {
+  if (formatContext->nb_streams != 1) {
     //{{{
-    cLog::log (LOGERROR, "Expected one audio input stream, but found %d", inFormatContext->nb_streams);
-    avformat_close_input (&inFormatContext);
+    cLog::log (LOGERROR, "Expected one audio input stream, but found %d", formatContext->nb_streams);
+    avformat_close_input (&formatContext);
     return false;
     }
     //}}}
 
   // Find a decoder for the audio stream. */
-  AVCodec* input_codec = avcodec_find_decoder (inFormatContext->streams[0]->codecpar->codec_id);
+  AVCodec* input_codec = avcodec_find_decoder (formatContext->streams[0]->codecpar->codec_id);
   if (!input_codec) {
     //{{{
     cLog::log (LOGERROR, "Could not find input codec");
-    avformat_close_input (&inFormatContext);
+    avformat_close_input (&formatContext);
     return false;
     }
     //}}}
 
   // Allocate a new decoding context. */
-  inCodecContext = avcodec_alloc_context3 (input_codec);
-  if (!inCodecContext) {
+  codecContext = avcodec_alloc_context3 (input_codec);
+  if (!codecContext) {
     //{{{
     cLog::log (LOGERROR, "Could not allocate a decoding context");
-    avformat_close_input (&inFormatContext);
+    avformat_close_input (&formatContext);
     return false;
     }
     //}}}
 
-  // Initialize the stream parameters with demuxer information. */
-  error = avcodec_parameters_to_context (inCodecContext, inFormatContext->streams[0]->codecpar);
+  // Initialize the stream parameters with demuxer formation. */
+  error = avcodec_parameters_to_context (codecContext, formatContext->streams[0]->codecpar);
   if (error < 0) {
-    avformat_close_input (&inFormatContext);
-    avcodec_free_context (&inCodecContext);
+    avformat_close_input (&formatContext);
+    avcodec_free_context (&codecContext);
     return false;
     }
 
   // Open the decoder for the audio stream to use it later. */
-  if ((error = avcodec_open2 (inCodecContext, input_codec, NULL)) < 0) {
+  if ((error = avcodec_open2 (codecContext, input_codec, NULL)) < 0) {
     //{{{
     cLog::log (LOGERROR, "Could not open input codec ");
-    avcodec_free_context (&inCodecContext);
-    avformat_close_input (&inFormatContext);
+    avcodec_free_context (&codecContext);
+    avformat_close_input (&formatContext);
     return false;
     }
     //}}}
@@ -125,44 +126,44 @@ bool openInFile (const char* filename, AVFormatContext*& inFormatContext, AVCode
   }
 //}}}
 //{{{
-bool openOutFile (const char* filename, AVFormatContext*& outFormatContext, AVCodecContext*& outCodecContext) {
+bool openOutFile (const char* filename, AVFormatContext*& formatContext, AVCodecContext*& codecContext) {
 
   // Find the encoder to be used by its name
   AVCodec* output_codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
-  outCodecContext = avcodec_alloc_context3 (output_codec);
+  codecContext = avcodec_alloc_context3 (output_codec);
 
   // Set the basic encoder parameters, input file's sample rate is used to avoid a sample rate conversion
-  outCodecContext->channels = OUTPUT_CHANNELS;
-  outCodecContext->channel_layout = av_get_default_channel_layout (OUTPUT_CHANNELS);
-  outCodecContext->sample_rate = OUTPUT_SAMPLE_RATE;
-  outCodecContext->sample_fmt = output_codec->sample_fmts[0];
-  outCodecContext->bit_rate = OUTPUT_BIT_RATE;
-  outCodecContext->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+  codecContext->channels = OUTPUT_CHANNELS;
+  codecContext->channel_layout = av_get_default_channel_layout (OUTPUT_CHANNELS);
+  codecContext->sample_rate = OUTPUT_SAMPLE_RATE;
+  codecContext->sample_fmt = output_codec->sample_fmts[0];
+  codecContext->bit_rate = OUTPUT_BIT_RATE;
+  codecContext->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 
   // Open the output file to write to it. */
   AVIOContext* output_io_context;
   int error = avio_open (&output_io_context, filename, AVIO_FLAG_WRITE);
 
   // Create a new format context for the output container format
-  outFormatContext = avformat_alloc_context();
-  outFormatContext->pb = output_io_context;
-  outFormatContext->oformat = av_guess_format (NULL, filename, NULL);
+  formatContext = avformat_alloc_context();
+  formatContext->pb = output_io_context;
+  formatContext->oformat = av_guess_format (NULL, filename, NULL);
 
   // Create a new audio stream in the output file container. */
-  AVStream* stream = avformat_new_stream (outFormatContext, NULL);
+  AVStream* stream = avformat_new_stream (formatContext, NULL);
   stream->time_base.den = OUTPUT_SAMPLE_RATE;
   stream->time_base.num = 1;
 
   // Some container formats (like MP4) require global headers to be present
   // Mark the encoder so that it behaves accordingly
-  if (outFormatContext->oformat->flags & AVFMT_GLOBALHEADER)
-    outCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+  if (formatContext->oformat->flags & AVFMT_GLOBALHEADER)
+    codecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
   // Open the encoder for the audio stream to use it later
   //auto res = av_opt_set (codecContext->priv_data, "profile", "aac_he", 0);
   //printf ("setopt %x", res);
-  error = avcodec_open2 (outCodecContext, output_codec, NULL);
-  error = avcodec_parameters_from_context (stream->codecpar, outCodecContext);
+  error = avcodec_open2 (codecContext, output_codec, NULL);
+  error = avcodec_parameters_from_context (stream->codecpar, codecContext);
 
   return true;
   }
@@ -220,11 +221,9 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
   }
 //}}}
 //{{{
-bool readFileDecodeFrameConvertStoreFifo (AVAudioFifo* fifo,
-                                          AVFormatContext* inFormatContext, AVCodecContext* inCodecContext,
-                                          AVCodecContext* outCodecContext,
-                                          SwrContext* swrContext,
-                                          bool& done) {
+bool readFileDecodeFrameConvertStoreFifo (AVFormatContext* inFormatContext, AVCodecContext* inCodecContext,
+                                          AVCodecContext* outCodecContext, SwrContext* swrContext,
+                                          AVAudioFifo* fifo, bool& done) {
 
   bool ok = false;
   uint8_t** convertedSamples = NULL;
@@ -358,7 +357,7 @@ cleanup:
 //{{{
 bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormatContext, AVCodecContext* outCodecContext) {
 
-  //* Temporary storage of the output samples of the frame written to the file
+  // Temporary storage of the output samples of the frame written to the file
   // Use the maximum number of possible samples per frame.
   // If there is less than the maximum possible frame size in the FIFO
   // buffer use this number. Otherwise, use the maximum possible frame size
@@ -371,7 +370,7 @@ bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormat
   AVFrame* frame = av_frame_alloc();
   if (!frame) {
     //{{{
-    cLog::log (LOGERROR, "Could not allocate output frame");
+    cLog::log (LOGERROR, "could not allocate output frame");
     return false;
     }
     //}}}
@@ -381,12 +380,11 @@ bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormat
   frame->format = outCodecContext->sample_fmt;
   frame->sample_rate = outCodecContext->sample_rate;
 
-  // Allocate the samples of the created frame. This call will make
-  // sure that the audio frame can hold as many samples as specified
+  // Allocate samples for created frame, makes sure audio frame can hold all the samples
   int error = av_frame_get_buffer (frame, 0);
   if (error < 0) {
     //{{{
-    cLog::log (LOGERROR, "Could not allocate output frame samples");
+    cLog::log (LOGERROR, "could not allocate output frame samples");
     av_frame_free (&frame);
     return false;
     }
@@ -396,7 +394,7 @@ bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormat
   // The samples are stored in the frame temporarily
   if (av_audio_fifo_read (fifo, (void**)frame->data, frame_size) < frame_size) {
     //{{{
-    cLog::log (LOGERROR, "Could not read data from FIFO");
+    cLog::log (LOGERROR, "could not read data from FIFO");
     av_frame_free (&frame);
     return false;
     }
@@ -425,8 +423,35 @@ void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
   if (len > 0)
     str[len-1] = 0;
 
-  // should convert level ???
-  cLog::log (LOGINFO, str);
+  switch (level) {
+    case AV_LOG_PANIC:
+      cLog::log (LOGERROR,   "ffmpeg Panic - %s", str);
+      break;
+    case AV_LOG_FATAL:
+      cLog::log (LOGERROR,   "ffmpeg Fatal - %s ", str);
+      break;
+    case AV_LOG_ERROR:
+      cLog::log (LOGERROR,   "ffmpeg Error - %s ", str);
+      break;
+    case AV_LOG_WARNING:
+      cLog::log (LOGNOTICE,  "ffmpeg Warn  - %s ", str);
+      break;
+    case AV_LOG_INFO:
+      cLog::log (LOGINFO,    "ffmpeg Info  - %s ", str);
+      break;
+    case AV_LOG_VERBOSE:
+      cLog::log (LOGINFO,    "ffmpeg Verbo - %s ", str);
+      break;
+    case AV_LOG_DEBUG:
+      cLog::log (LOGINFO,    "ffmpeg Debug - %s ", str);
+      break;
+    case AV_LOG_TRACE:
+      cLog::log (LOGINFO,    "ffmpeg Trace - %s ", str);
+      break;
+    default :
+      cLog::log (LOGERROR,   "ffmpeg ????? - %s ", str);
+      break;
+    }
   }
 //}}}
 //{{{
@@ -501,7 +526,7 @@ int main (int argc, char **argv) {
   while (!inputDone) {
     // while some input and not enough output samples
     while (!inputDone && (av_audio_fifo_size (fifo) < outCodecContext->frame_size))
-      if (!readFileDecodeFrameConvertStoreFifo (fifo, inFormatContext, inCodecContext, outCodecContext, swrContext, inputDone))
+      if (!readFileDecodeFrameConvertStoreFifo (inFormatContext, inCodecContext, outCodecContext, swrContext, fifo, inputDone))
         goto cleanup;
 
     // while enough output samples
