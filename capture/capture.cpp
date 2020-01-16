@@ -28,10 +28,10 @@ extern "C" {
 const int kCaptureChannnels = 2;
 
 //{{{
-class cWavWriteFile {
+class cWavWriter {
 public:
   //{{{
-  cWavWriteFile (char* filename, WAVEFORMATEX* waveFormatEx) {
+  cWavWriter (char* filename, WAVEFORMATEX* waveFormatEx) {
 
     mFilename = (char*)malloc (strlen (filename));
     strcpy (mFilename, filename);
@@ -39,7 +39,7 @@ public:
     }
   //}}}
   //{{{
-  ~cWavWriteFile() {
+  ~cWavWriter() {
     finish();
     }
   //}}}
@@ -248,10 +248,10 @@ private:
   };
 //}}}
 //{{{
-class cAacWriteFile {
+class cAacWriter {
 public:
   //{{{
-  cAacWriteFile (char* filename, int channels, int sampleRate, int bitRate) {
+  cAacWriter (char* filename, int channels, int sampleRate, int bitRate) {
 
   #define OUTPUT_CHANNELS 2
   #define OUTPUT_BIT_RATE 128000
@@ -263,7 +263,7 @@ public:
     }
   //}}}
   //{{{
-  ~cAacWriteFile() {
+  ~cAacWriter() {
 
     bool flushingEncoder = true;
     while (flushingEncoder)
@@ -281,7 +281,7 @@ public:
   int getFrameSize() { return mCodecContext->frame_size; }
 
   //{{{
-  void write (float* ptr, int numSamples) {
+  void write (float* data, int numSamples) {
 
     AVFrame* frame = av_frame_alloc();
     frame->nb_samples = mCodecContext->frame_size;
@@ -293,8 +293,8 @@ public:
     auto samplesL = (float*)frame->data[0];
     auto samplesR = (float*)frame->data[1];
     for (int i = 0; i < getFrameSize(); i++) {
-      *samplesL++ = *ptr++;
-      *samplesR++ = *ptr++;
+      *samplesL++ = *data++;
+      *samplesR++ = *data++;
       }
 
     bool hasData;
@@ -584,7 +584,7 @@ private:
 //{{{
 DWORD WINAPI captureThread (LPVOID param) {
 
-  cCapture* capture = (cCapture*)param;
+  cCaptureWASAPI* capture = (cCaptureWASAPI*)param;
 
   cLog::setThreadName ("capt");
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
@@ -650,17 +650,16 @@ void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
 //{{{
 int main() {
 
+  CoInitializeEx (NULL, COINIT_MULTITHREADED);
+
   cLog::init (LOGINFO, false, "");
   cLog::log (LOGNOTICE, "capture");
-
   av_log_set_level (AV_LOG_VERBOSE);
   av_log_set_callback (avLogCallback);
 
-  CoInitializeEx (NULL, COINIT_MULTITHREADED);
-
   cCaptureWASAPI capture;
-  cAacWriteFile aacFile ("D:/Capture/out.aac", kCaptureChannnels, 48000, 128000);
-  cWavWriteFile wavFile ("D:/Capture/out.wav", capture.mWaveFormatEx);
+  cAacWriter aacWriter ("D:/Capture/out.aac", kCaptureChannnels, 48000, 128000);
+  cWavWriter wavWriter ("D:/Capture/out.wav", capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
@@ -671,15 +670,15 @@ int main() {
     }
     //}}}
 
-  const int frameSize = aacFile.getFrameSize();
+  const int frameSize = aacWriter.getFrameSize();
   cLog::log (LOGINFO, "capture and encode with frameSize:%d", frameSize);
 
   while (true) {
     auto framePtr = capture.getFrame (frameSize);
     if (framePtr) {
       // enough data to encode
-      wavFile.write (framePtr, frameSize);
-      aacFile.write (framePtr, frameSize);
+      wavWriter.write (framePtr, frameSize);
+      aacWriter.write (framePtr, frameSize);
       }
     else
       Sleep (10);
