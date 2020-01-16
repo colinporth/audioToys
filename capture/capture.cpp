@@ -411,7 +411,7 @@ private:
 class cCaptureWASAPI {
 public:
   //{{{
-  cCaptureWASAPI() {
+  cCaptureWASAPI (uint32_t bufferSize) {
 
     // activate a device enumerator
     IMMDeviceEnumerator* pMMDeviceEnumerator = NULL;
@@ -452,10 +452,11 @@ public:
         pMMDeviceEnumerator->Release();
 
       // simple 1Gb big linear buffer for now
-      mStreamFirst = (float*)malloc (0x40000000);
-      mStreamLast = mStreamFirst + (0x40000000 / 4);
+      mStreamFirst = (float*)malloc (bufferSize);
+      mStreamLast = mStreamFirst + (bufferSize / 4);
       mStreamReadPtr = mStreamFirst;
       mStreamWritePtr = mStreamFirst;
+      cLog::log (LOGNOTICE, "Simple buffer lasts %d minutes", bufferSize / 4 / 2 / 48000 / 60);
       }
     }
   //}}}
@@ -654,7 +655,7 @@ int main() {
   av_log_set_level (AV_LOG_VERBOSE);
   av_log_set_callback (avLogCallback);
 
-  cCaptureWASAPI capture;
+  cCaptureWASAPI capture (0x80000000);
   cAacWriter aacWriter ("D:/Capture/capture.aac", capture.getChannels(), 48000, 128000);
   cWavWriter wavWriter ("D:/Capture/capture.wav", capture.mWaveFormatEx);
 
