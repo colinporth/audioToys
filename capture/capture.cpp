@@ -25,17 +25,14 @@ extern "C" {
 #include "../../shared/utils/cLog.h"
 //}}}
 
-const int kCaptureChannnels = 2;
-
 //{{{
 class cWavWriter {
 public:
   //{{{
-  cWavWriter (char* filename, WAVEFORMATEX* waveFormatEx) {
+  cWavWriter (std::string filename, WAVEFORMATEX* waveFormatEx) {
 
-    mFilename = (char*)malloc (strlen (filename));
-    strcpy (mFilename, filename);
-    open (mFilename, waveFormatEx);
+    mFilename = filename;
+    open ((char*)filename.c_str(), waveFormatEx);
     }
   //}}}
   //{{{
@@ -183,7 +180,7 @@ private:
 
     // reopen the file in read/write mode
     MMIOINFO mi = { 0 };
-    file = mmioOpen (mFilename, &mi, MMIO_READWRITE);
+    file = mmioOpen ((char*)mFilename.c_str(), &mi, MMIO_READWRITE);
     if (NULL == file) {
       //{{{
       cLog::log (LOGERROR, "mmioOpen failed");
@@ -235,7 +232,7 @@ private:
     }
   //}}}
 
-  char* mFilename;
+  std::string mFilename;
   HMMIO file;
 
   MMCKINFO ckRIFF = { 0 };
@@ -251,13 +248,9 @@ private:
 class cAacWriter {
 public:
   //{{{
-  cAacWriter (char* filename, int channels, int sampleRate, int bitRate) {
+  cAacWriter (std::string filename, int channels, int sampleRate, int bitRate) {
 
-  #define OUTPUT_CHANNELS 2
-  #define OUTPUT_BIT_RATE 128000
-  #define OUTPUT_SAMPLE_RATE 48000
-
-    if (openOutFile (filename, channels, sampleRate, bitRate))
+    if (openOutFile (filename.c_str(), channels, sampleRate, bitRate))
       if (avformat_write_header (mFormatContext, NULL) < 0)
         mOk = true;
     }
@@ -284,6 +277,7 @@ public:
   void write (float* data, int numSamples) {
 
     AVFrame* frame = av_frame_alloc();
+
     frame->nb_samples = mCodecContext->frame_size;
     frame->channel_layout = mCodecContext->channel_layout;
     frame->format = mCodecContext->sample_fmt;
@@ -299,6 +293,7 @@ public:
 
     bool hasData;
     encodeFrame (frame, hasData);
+
     av_frame_free (&frame);
     }
   //}}}
@@ -307,19 +302,19 @@ private:
   //{{{
   bool openOutFile (const char* filename, int channels, int sampleRate, int bitRate) {
 
-    // Find the encoder to be used by its name
+    // find the encoder by name
     AVCodec* codec = avcodec_find_encoder (AV_CODEC_ID_AAC);
     mCodecContext = avcodec_alloc_context3 (codec);
 
-    // Set the basic encoder parameters, input file's sample rate is used to avoid a sample rate conversion
+    // set basic encoder parameters
     mCodecContext->channels = channels;
-    mCodecContext->channel_layout = av_get_default_channel_layout (OUTPUT_CHANNELS);
+    mCodecContext->channel_layout = av_get_default_channel_layout (channels);
     mCodecContext->sample_rate = sampleRate;
     mCodecContext->sample_fmt = codec->sample_fmts[0];
     mCodecContext->bit_rate = bitRate;
     mCodecContext->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 
-    // Open the output file to write to it. */
+    // Open the output file to write to it
     AVIOContext* ioContext;
     int error = avio_open (&ioContext, filename, AVIO_FLAG_WRITE);
 
@@ -328,9 +323,9 @@ private:
     mFormatContext->pb = ioContext;
     mFormatContext->oformat = av_guess_format (NULL, filename, NULL);
 
-    // Create a new audio stream in the output file container. */
+    // Create a new audio stream in the output file container
     AVStream* stream = avformat_new_stream (mFormatContext, NULL);
-    stream->time_base.den = OUTPUT_SAMPLE_RATE;
+    stream->time_base.den = sampleRate;
     stream->time_base.num = 1;
 
     // Some container formats (like MP4) require global headers to be present
@@ -485,6 +480,7 @@ public:
     }
   //}}}
 
+  int getChannels() { return kCaptureChannnels; }
   //{{{
   float* getFrame (int frameSize) {
   // get frameSize worth of floats if available
@@ -569,6 +565,8 @@ public:
   WAVEFORMATEX* mWaveFormatEx = NULL;
 
 private:
+  const int kCaptureChannnels = 2;
+
   IMMDevice* mMMDevice = NULL;
 
   IAudioClient* mAudioClient = NULL;
@@ -584,10 +582,10 @@ private:
 //{{{
 DWORD WINAPI captureThread (LPVOID param) {
 
-  cCaptureWASAPI* capture = (cCaptureWASAPI*)param;
+  CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
   cLog::setThreadName ("capt");
-  CoInitializeEx (NULL, COINIT_MULTITHREADED);
+  cCaptureWASAPI* capture = (cCaptureWASAPI*)param;
 
   //  register task with MMCSS, set off wakeup timer
   DWORD nTaskIndex = 0;
@@ -647,9 +645,8 @@ void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
     }
   }
 //}}}
-//{{{
-int main() {
 
+int main() {
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
   cLog::init (LOGINFO, false, "");
@@ -658,8 +655,8 @@ int main() {
   av_log_set_callback (avLogCallback);
 
   cCaptureWASAPI capture;
-  cAacWriter aacWriter ("D:/Capture/out.aac", kCaptureChannnels, 48000, 128000);
-  cWavWriter wavWriter ("D:/Capture/out.wav", capture.mWaveFormatEx);
+  cAacWriter aacWriter ("D:/Capture/capture.aac", capture.getChannels(), 48000, 128000);
+  cWavWriter wavWriter ("D:/Capture/capture.wav", capture.mWaveFormatEx);
 
   // capture thread
   HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
@@ -676,7 +673,6 @@ int main() {
   while (true) {
     auto framePtr = capture.getFrame (frameSize);
     if (framePtr) {
-      // enough data to encode
       wavWriter.write (framePtr, frameSize);
       aacWriter.write (framePtr, frameSize);
       }
@@ -686,7 +682,5 @@ int main() {
 
   CloseHandle (hThread);
   CoUninitialize();
-
   return 0;
   }
-//}}}
