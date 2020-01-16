@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <windows.h>
 
+#include <string>
+#include <thread>
+
 #include <mmsystem.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
@@ -413,51 +416,50 @@ public:
   //{{{
   cCaptureWASAPI (uint32_t bufferSize) {
 
-    // activate a device enumerator
-    IMMDeviceEnumerator* pMMDeviceEnumerator = NULL;
-    if (FAILED (CoCreateInstance (__uuidof(MMDeviceEnumerator), NULL,
-                                  CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pMMDeviceEnumerator))) {
-      cLog::log (LOGERROR, "cCapture create IMMDeviceEnumerator failed");
-      }
+    IMMDeviceEnumerator* myMMDeviceEnumerator = NULL;
+    if (FAILED (CoCreateInstance (__uuidof (MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                  __uuidof (IMMDeviceEnumerator), (void**)&myMMDeviceEnumerator)))
+      cLog::log (LOGERROR, "create IMMDeviceEnumerator failed");
 
     else {
       // get default render endpoint
-      if (FAILED (pMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
-        cLog::log (LOGERROR, "cCapture MMDeviceEnumerator::GetDefaultAudioEndpoint failed");
+      if (FAILED (myMMDeviceEnumerator->GetDefaultAudioEndpoint (eRender, eMultimedia, &mMMDevice)))
+        cLog::log (LOGERROR, "IMMDeviceEnumerator::GetDefaultAudioEndpoint failed");
 
       if (FAILED (mMMDevice->Activate (__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&mAudioClient)))
-        cLog::log (LOGERROR, "cCapture IMMDevice::Activate IAudioClient failed");
+        cLog::log (LOGERROR, "IMMDevice::Activate IAudioClient failed");
 
       if (FAILED (mAudioClient->GetDevicePeriod (&mHhnsDefaultDevicePeriod, NULL)))
-        cLog::log (LOGERROR, "cCapture audioClient GetDevicePeriod failed");
+        cLog::log (LOGERROR, "audioClient GetDevicePeriod failed");
 
       // get the default device format
       if (FAILED (mAudioClient->GetMixFormat (&mWaveFormatEx)))
-        cLog::log (LOGERROR, "cCapture audioClient GetMixFormat failed");
+        cLog::log (LOGERROR, "audioClient GetMixFormat failed");
 
       // with AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_EVENTCALLBACK "data ready" event never gets set
-      if (FAILED (mAudioClient->Initialize (
-           AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, mWaveFormatEx, 0)))
-        cLog::log (LOGERROR, "cCapture AudioClient initialize failed");
+      if (FAILED (mAudioClient->Initialize (AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0, mWaveFormatEx, 0)))
+        cLog::log (LOGERROR, "audioClient initialize failed");
 
       // activate an IAudioCaptureClient
       if (FAILED (mAudioClient->GetService (__uuidof(IAudioCaptureClient), (void**)&mAudioCaptureClient)))
-        cLog::log (LOGERROR, "cCapture create IAudioCaptureClient failed");
+        cLog::log (LOGERROR, "create IAudioCaptureClient failed");
 
       // start audioClient
       if (FAILED (mAudioClient->Start()))
-        cLog::log (LOGERROR, "cCapture audioClient start failed");
+        cLog::log (LOGERROR, "audioClient start failed");
 
-      if (pMMDeviceEnumerator)
-        pMMDeviceEnumerator->Release();
+      if (myMMDeviceEnumerator)
+        myMMDeviceEnumerator->Release();
 
       // simple 1Gb big linear buffer for now
       mStreamFirst = (float*)malloc (bufferSize);
       mStreamLast = mStreamFirst + (bufferSize / 4);
       mStreamReadPtr = mStreamFirst;
       mStreamWritePtr = mStreamFirst;
+
       cLog::log (LOGNOTICE, "Simple buffer lasts %d minutes", bufferSize / 4 / 2 / 48000 / 60);
       }
+
     }
   //}}}
   //{{{
@@ -572,7 +574,7 @@ private:
 
   IAudioClient* mAudioClient = NULL;
   IAudioCaptureClient* mAudioCaptureClient = NULL;
-  REFERENCE_TIME mHhnsDefaultDevicePeriod;
+  REFERENCE_TIME mHhnsDefaultDevicePeriod = 0;
 
   float* mStreamFirst = nullptr;
   float* mStreamLast = nullptr;
@@ -581,12 +583,11 @@ private:
   };
 //}}}
 //{{{
-DWORD WINAPI captureThread (LPVOID param) {
+void captureThread (cCaptureWASAPI* capture) {
 
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
   cLog::setThreadName ("capt");
-  cCaptureWASAPI* capture = (cCaptureWASAPI*)param;
 
   //  register task with MMCSS, set off wakeup timer
   DWORD nTaskIndex = 0;
@@ -599,8 +600,6 @@ DWORD WINAPI captureThread (LPVOID param) {
     cLog::log (LOGERROR, "AvSetMmThreadCharacteristics failed %u", GetLastError());
 
   CoUninitialize();
-
-  return 0;
   }
 //}}}
 
@@ -655,24 +654,17 @@ int main() {
   av_log_set_level (AV_LOG_VERBOSE);
   av_log_set_callback (avLogCallback);
 
-  cCaptureWASAPI capture (0x80000000);
-  cAacWriter aacWriter ("D:/Capture/capture.aac", capture.getChannels(), 48000, 128000);
-  cWavWriter wavWriter ("D:/Capture/capture.wav", capture.mWaveFormatEx);
+  cCaptureWASAPI* capture = new cCaptureWASAPI (0x80000000);
+  cAacWriter aacWriter ("D:/Capture/capture.aac", capture->getChannels(), 48000, 128000);
+  cWavWriter wavWriter ("D:/Capture/capture.wav", capture->mWaveFormatEx);
 
-  // capture thread
-  HANDLE hThread = CreateThread (NULL, 0, captureThread, &capture, 0, NULL );
-  if (!hThread) {
-    //{{{
-    cLog::log (LOGERROR, "CreateThread failed: last error is %u", GetLastError());
-    return 0;
-    }
-    //}}}
+  std::thread ([=]() { captureThread (capture); }).detach();
 
   const int frameSize = aacWriter.getFrameSize();
   cLog::log (LOGINFO, "capture and encode with frameSize:%d", frameSize);
 
   while (true) {
-    auto framePtr = capture.getFrame (frameSize);
+    auto framePtr = capture->getFrame (frameSize);
     if (framePtr) {
       wavWriter.write (framePtr, frameSize);
       aacWriter.write (framePtr, frameSize);
@@ -681,7 +673,8 @@ int main() {
       Sleep (10);
     }
 
-  CloseHandle (hThread);
+  delete (capture);
+
   CoUninitialize();
   return 0;
   }
