@@ -437,7 +437,14 @@ int writeDataCallback (void* file, uint8_t* data, int size) {
 //}}}
 //{{{
 void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
-  cLog::log (LOGINFO, fmt, vargs);
+
+  char str[256];
+  vsnprintf (str, 256, fmt, vargs);
+  auto len = strlen (str);
+  if (len > 0)
+    str[len-1] = 0;
+
+  cLog::log (LOGINFO, str);
   }
 //}}}
 //{{{

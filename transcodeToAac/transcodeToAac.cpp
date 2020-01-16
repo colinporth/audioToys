@@ -21,8 +21,10 @@
 //}}}
 //{{{  includes
 #define _CRT_SECURE_NO_WARNINGS
+#define WIN32_LEAN_AND_MEAN
 
 #include <stdio.h>
+#include <windows.h>
 
 extern "C" {
   #include "libavformat/avformat.h"
@@ -180,20 +182,21 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
   input_packet.size = 0;
 
   // Read one audio frame from the input file into a temporary packet
-  int error;
-  if ((error = av_read_frame (inFormatContext, &input_packet)) < 0) {
+  int error = av_read_frame (inFormatContext, &input_packet);
+  if (error < 0) {
     // If we are at the end of the file, flush the decoder below
     if (error == AVERROR_EOF)
       done = true;
     else {
-      cLog::log (LOGERROR, "Could not read frame");
+      cLog::log (LOGERROR, "error read frame");
       return false;
       }
     }
 
   // Send the audio frame stored in the temporary packet to the decoder, input audio stream decoder is used to do this
-  if ((error = avcodec_send_packet (inCodecContext, &input_packet)) < 0)
-    cLog::log (LOGERROR, "Could not send packet for decoding ");
+  error = avcodec_send_packet (inCodecContext, &input_packet);
+  if (error < 0)
+    cLog::log (LOGERROR, "error send packet for decoding ");
   else {
     // Receive one frame from the decoder
     // If the decoder asks for more data to be able to decode a frame, return indicating that no data is present
@@ -205,7 +208,7 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
     else if (error == AVERROR(EAGAIN))
       ok = true;
     else if (error < 0)
-      cLog::log (LOGERROR, "Could not decode frame");
+      cLog::log (LOGERROR, "error decode frame");
     else {
       ok = true;
       hasData = true;
@@ -413,7 +416,17 @@ bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormat
 
 //{{{
 void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
-  cLog::log (LOGINFO, fmt, vargs);
+
+  char str[100];
+  vsnprintf (str, 100, fmt, vargs);
+
+  // trim trailing return
+  auto len = strlen (str);
+  if (len > 0)
+    str[len-1] = 0;
+
+  // should convert level ???
+  cLog::log (LOGINFO, str);
   }
 //}}}
 //{{{
@@ -436,7 +449,7 @@ int main (int argc, char **argv) {
 
   if (argc != 2) {
     //{{{
-    cLog::log (LOGERROR, "Usage: %s <input file> <output file>", argv[0]);
+    cLog::log (LOGINFO, "Usage: %s <input file> <output file>", argv[0]);
     exit(1);
     }
     //}}}
@@ -507,6 +520,8 @@ int main (int argc, char **argv) {
     ret = 0;
 
 cleanup:
+  cLog::log (LOGINFO, "done");
+
   if (fifo)
     av_audio_fifo_free (fifo);
 
@@ -526,6 +541,7 @@ cleanup:
   if (inFormatContext)
     avformat_close_input (&inFormatContext);
 
+  Sleep (5000);
   return ret;
   }
 //}}}
