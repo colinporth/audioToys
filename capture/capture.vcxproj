@@ -19,10 +19,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\shared\utils\cCaptureWASAPI.cpp" />
     <ClCompile Include="..\..\shared\utils\cLog.cpp" />
     <ClCompile Include="capture.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\shared\utils\audioHelpers.h" />
+    <ClInclude Include="..\..\shared\utils\cCaptureWASAPI.h" />
     <ClInclude Include="..\..\shared\utils\cLog.h" />
     <ClInclude Include="..\..\shared\utils\date.h" />
     <ClInclude Include="..\..\shared\utils\utils.h" />

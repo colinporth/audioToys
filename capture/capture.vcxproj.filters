@@ -3,6 +3,7 @@
   <ItemGroup>
     <ClCompile Include="capture.cpp" />
     <ClCompile Include="..\..\shared\utils\cLog.cpp" />
+    <ClCompile Include="..\..\shared\utils\cCaptureWASAPI.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="h">
@@ -17,6 +18,12 @@
       <Filter>h</Filter>
     </ClInclude>
     <ClInclude Include="..\..\shared\utils\utils.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\shared\utils\cCaptureWASAPI.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\shared\utils\audioHelpers.h">
       <Filter>h</Filter>
     </ClInclude>
   </ItemGroup>

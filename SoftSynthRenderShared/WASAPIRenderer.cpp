@@ -396,24 +396,24 @@ DWORD CWASAPIRenderer::DoRenderThread() {
         //  We need to stop the renderer, tear down the _AudioClient and _RenderClient objects and re-create them on the new.
         //  endpoint if possible.  If this fails, abort the thread.
         if (!HandleStreamSwitchEvent())
-            stillPlaying = false;
+          stillPlaying = false;
         break;
         //}}}
       case WAIT_OBJECT_0 + 2:
-        //{{{  _AudioSamplesReadyEvent We need to provide the next buffer of samples to the audio renderer.
-        BYTE *pData;
+        // _AudioSamplesReadyEvent We need to provide the next buffer of samples to the audio renderer.
+        BYTE* pData;
         UINT32 padding;
         UINT32 framesAvailable;
 
-        //  We want to find out how much of the buffer *isn't* available (is padding).
+        // We want to find out how much of the buffer *isn't* available (is padding).
         hr = _AudioClient->GetCurrentPadding(&padding);
         if (SUCCEEDED(hr)) {
-          //  Calculate the number of frames available.  We'll render
-          //  that many frames or the number of frames left in the buffer, whichever is smaller.
+          // Calculate the number of frames available.  We'll render
+          // that many frames or the number of frames left in the buffer, whichever is smaller.
           framesAvailable = _BufferSize - padding;
 
-          //  If the buffer at the head of the render buffer queue fits in the frames available, render it.  If we don't
-          //  have enough room to fit the buffer, skip this pass - we will have enough room on the next pass.
+          // If the buffer at the head of the render buffer queue fits in the frames available, render it.  If we don't
+          // have enough room to fit the buffer, skip this pass - we will have enough room on the next pass.
           if (_RenderBufferQueue == NULL)
             stillPlaying = false;
           else if (_RenderBufferQueue->_BufferLength <= (framesAvailable *_FrameSize)) {
@@ -424,11 +424,11 @@ DWORD CWASAPIRenderer::DoRenderThread() {
 
             // copy data out of it
             UINT32 framesToWrite = renderBuffer->_BufferLength / _FrameSize;
-            hr = _RenderClient->GetBuffer(framesToWrite, &pData);
+            hr = _RenderClient->GetBuffer (framesToWrite, &pData);
             if (SUCCEEDED(hr)) {
              //  Copy data from the render buffer to the output buffer and bump our render pointer.
              CopyMemory(pData, renderBuffer->_Buffer, framesToWrite*_FrameSize);
-             hr = _RenderClient->ReleaseBuffer(framesToWrite, 0);
+             hr = _RenderClient->ReleaseBuffer (framesToWrite, 0);
              if (!SUCCEEDED(hr)) {
                printf("Unable to release buffer: %x\n", hr);
                stillPlaying = false;
@@ -438,6 +438,7 @@ DWORD CWASAPIRenderer::DoRenderThread() {
              printf("Unable to release buffer: %x\n", hr);
              stillPlaying = false;
              }
+
            // generate next frame
            m_pSE->GenerateSamples(renderBuffer->_Buffer, m_pSE->GetParams()->GetSamplesPerBlock(), 2, 440);
 
@@ -449,13 +450,12 @@ DWORD CWASAPIRenderer::DoRenderThread() {
            }
         }
         break;
-        //}}}
       }
     }
 
   //  Unhook from MMCSS.
   if (!DisableMMCSS)
-    AvRevertMmThreadCharacteristics(mmcssHandle);
+    AvRevertMmThreadCharacteristics (mmcssHandle);
 
   CoUninitialize();
   return 0;

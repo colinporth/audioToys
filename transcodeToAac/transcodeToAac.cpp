@@ -177,13 +177,13 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
   done = false;
 
   // Packet used for temporary storage
-  AVPacket input_packet;
-  av_init_packet (&input_packet);
-  input_packet.data = NULL;
-  input_packet.size = 0;
+  AVPacket packet;
+  av_init_packet (&packet);
+  packet.data = NULL;
+  packet.size = 0;
 
   // Read one audio frame from the input file into a temporary packet
-  int error = av_read_frame (inFormatContext, &input_packet);
+  int error = av_read_frame (inFormatContext, &packet);
   if (error < 0) {
     // If we are at the end of the file, flush the decoder below
     if (error == AVERROR_EOF)
@@ -195,7 +195,7 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
     }
 
   // Send the audio frame stored in the temporary packet to the decoder, input audio stream decoder is used to do this
-  error = avcodec_send_packet (inCodecContext, &input_packet);
+  error = avcodec_send_packet (inCodecContext, &packet);
   if (error < 0)
     cLog::log (LOGERROR, "error send packet for decoding ");
   else {
@@ -216,7 +216,7 @@ bool decodeFrame (AVFrame* frame, AVFormatContext* inFormatContext, AVCodecConte
       }
     }
 
-  av_packet_unref (&input_packet);
+  av_packet_unref (&packet);
   return ok;
   }
 //}}}
@@ -305,10 +305,10 @@ bool encodeFrame (AVFrame* frame, AVFormatContext* outFormatContext, AVCodecCont
   hasData = false;
 
   // Packet used for temporary storage
-  AVPacket output_packet;
-  av_init_packet (&output_packet);
-  output_packet.data = NULL;
-  output_packet.size = 0;
+  AVPacket packet;
+  av_init_packet (&packet);
+  packet.data = NULL;
+  packet.size = 0;
 
   // Set a timestamp based on the sample rate for the container
   if (frame) {
@@ -330,7 +330,7 @@ bool encodeFrame (AVFrame* frame, AVFormatContext* outFormatContext, AVCodecCont
 
   // Receive one encoded frame from the encoder
   // If the encoder asks for more data to be able to provide an encoded frame, return indicating that no data is present
-  error = avcodec_receive_packet (outCodecContext, &output_packet);
+  error = avcodec_receive_packet (outCodecContext, &packet);
   if (error == AVERROR(EAGAIN))
     ok = true;
   else if (error == AVERROR_EOF)
@@ -344,13 +344,13 @@ bool encodeFrame (AVFrame* frame, AVFormatContext* outFormatContext, AVCodecCont
 
   // Write one audio frame from the temporary packet to the output file
   if (hasData)
-    if (av_write_frame (outFormatContext, &output_packet) < 0) {
+    if (av_write_frame (outFormatContext, &packet) < 0) {
       ok = false;
       cLog::log (LOGERROR, "error write frame");
       }
 
 cleanup:
-  av_packet_unref (&output_packet);
+  av_packet_unref (&packet);
   return ok;
   }
 //}}}
@@ -413,55 +413,13 @@ bool readFifoEncodeFrameWriteFile (AVAudioFifo* fifo, AVFormatContext* outFormat
 //}}}
 
 //{{{
-void avLogCallback (void* ptr, int level, const char* fmt, va_list vargs) {
-
-  char str[100];
-  vsnprintf (str, 100, fmt, vargs);
-
-  // trim trailing return
-  auto len = strlen (str);
-  if (len > 0)
-    str[len-1] = 0;
-
-  switch (level) {
-    case AV_LOG_PANIC:
-      cLog::log (LOGERROR,   "ffmpeg Panic - %s", str);
-      break;
-    case AV_LOG_FATAL:
-      cLog::log (LOGERROR,   "ffmpeg Fatal - %s ", str);
-      break;
-    case AV_LOG_ERROR:
-      cLog::log (LOGERROR,   "ffmpeg Error - %s ", str);
-      break;
-    case AV_LOG_WARNING:
-      cLog::log (LOGNOTICE,  "ffmpeg Warn  - %s ", str);
-      break;
-    case AV_LOG_INFO:
-      cLog::log (LOGINFO,    "ffmpeg Info  - %s ", str);
-      break;
-    case AV_LOG_VERBOSE:
-      cLog::log (LOGINFO,    "ffmpeg Verbo - %s ", str);
-      break;
-    case AV_LOG_DEBUG:
-      cLog::log (LOGINFO,    "ffmpeg Debug - %s ", str);
-      break;
-    case AV_LOG_TRACE:
-      cLog::log (LOGINFO,    "ffmpeg Trace - %s ", str);
-      break;
-    default :
-      cLog::log (LOGERROR,   "ffmpeg ????? - %s ", str);
-      break;
-    }
-  }
-//}}}
-//{{{
 int main (int argc, char **argv) {
 
   cLog::init (LOGINFO, false, "");
   cLog::log (LOGNOTICE, "transcode");
 
   av_log_set_level (AV_LOG_ERROR);
-  av_log_set_callback (avLogCallback);
+  av_log_set_callback (cLog::avLogCallback);
 
   AVFormatContext* inFormatContext = NULL;
   AVFormatContext* outFormatContext = NULL;
