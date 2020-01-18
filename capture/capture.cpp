@@ -8,7 +8,6 @@
 
 #include <string>
 #include <thread>
-#include <avrt.h>
 
 extern "C" {
   #include <libavcodec/avcodec.h>
@@ -34,23 +33,6 @@ int main() {
   auto capture = new cCaptureWASAPI (0x80000000);
   cWavWriter wavWriter ("D:/Capture/capture.wav", capture->getWaveFormatEx());
   cAacWriter aacWriter ("D:/Capture/capture.aac", capture->getChannels(), 48000, 128000);
-
-  std::thread ([=]() {
-    //{{{  cCaptureWASAPI run
-    CoInitializeEx (NULL, COINIT_MULTITHREADED);
-    cLog::setThreadName ("capt");
-
-    // elevate task priority
-    DWORD nTaskIndex = 0;
-    HANDLE hTask = AvSetMmThreadCharacteristics ("Audio", &nTaskIndex);
-    if (hTask) {
-      capture->run();
-      AvRevertMmThreadCharacteristics (hTask);
-      }
-
-    CoUninitialize();
-    //}}}
-    } ).detach();
 
   const int frameSize = aacWriter.getFrameSize();
   cLog::log (LOGINFO, "capture and encode with frameSize:%d", frameSize);
