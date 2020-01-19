@@ -292,7 +292,7 @@ LPWSTR GetDeviceName (IMMDeviceCollection *DeviceCollection, UINT DeviceIndex) {
   }
 //}}}
 //{{{
-bool PickDevice (IMMDevice **DeviceToUse, bool *IsDefaultDevice, ERole *DefaultDeviceRole) {
+bool PickDevice (IMMDevice** DeviceToUse, bool* IsDefaultDevice, ERole* DefaultDeviceRole) {
 
   HRESULT hr;
   bool retValue = true;
@@ -428,7 +428,7 @@ Exit:
 int wmain (int argc, wchar_t* argv[]) {
 
   int result = 0;
-  IMMDevice *device = NULL;
+  IMMDevice* device = NULL;
   bool isDefaultDevice;
   ERole role;
 

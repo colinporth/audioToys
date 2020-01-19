@@ -5,19 +5,25 @@ build/*
 *.o
 *.obj
 *.exe
+*.json
 
-## Visual Studio cruft
 .vs/*
 */ipch/*
 *.opensdf
 *.log
 *.pdb
+*.ipch
+*.ipdb
+*.iobj
 *.ilk
 *.user
 *.sdf
 *.suo
 *.VC.db
 *.VC.VC.opendb
+*.log
+*.tlog
+*.lastbuildstate
 
 ## Dear ImGui Ini files
 imgui.ini
