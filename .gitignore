@@ -2,6 +2,7 @@ build/*
 */Debug/*
 */Release/*
 */x64/*
+
 *.o
 *.obj
 *.exe
@@ -25,12 +26,8 @@ build/*
 *.tlog
 *.lastbuildstate
 
-## Dear ImGui Ini files
-imgui.ini
-
 *.~*
 *.*~
 
-*.wav
 *.aac
 *.mp3

@@ -25,8 +25,7 @@ extern "C" {
 int main() {
   CoInitializeEx (NULL, COINIT_MULTITHREADED);
 
-  cLog::init (LOGINFO, false, "");
-  cLog::log (LOGNOTICE, "capture");
+  cLog::init (LOGINFO, false, "",  "capture");
   av_log_set_level (AV_LOG_VERBOSE);
   av_log_set_callback (cLog::avLogCallback);
 
