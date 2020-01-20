@@ -9,8 +9,9 @@
 
 #include <cmath>
 #include <thread>
-#include "audio.h"
 #include <cmath>
+
+#include "audio.h"
 
 // This example app plays a sine wave of a given frequency for 5 seconds.
 
@@ -31,11 +32,11 @@ int main() {
     auto& out = *io.output_buffer;
 
     for (int frame = 0; frame < out.size_frames(); ++frame) {
-      float next_sample = std::sin(phase);
-      phase = std::fmod(phase + delta, 2.0f * static_cast<float>(M_PI));
+      float next_sample = std::sin (phase);
+      phase = std::fmod (phase + delta, 2.0f * static_cast<float>(M_PI));
 
       for (int channel = 0; channel < out.size_channels(); ++channel)
-        out(frame, channel) = 0.2f * next_sample;
+        out (frame, channel) = 0.2f * next_sample;
     }
   });
 
