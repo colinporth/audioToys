@@ -1,4 +1,6 @@
 //{{{
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -9,7 +11,7 @@
 
 #include "dither.h"
 
-#include "sleefdft.h"
+#include "dft/sleefdft.h"
 //}}}
 //{{{
 #define VERSION "1.33"
@@ -58,9 +60,9 @@ int do_shaping (double s, double *peak, int dtype, int ch) {
 //{{{
 double alpha (double a) {
 
-  if (a <= 21) 
+  if (a <= 21)
     return 0;
-  if (a <= 50) 
+  if (a <= 50)
     return 0.5842 * pow (a-21,0.4) + 0.07886 * (a-21);
 
   return 0.1102*(a-8.7);
@@ -176,8 +178,8 @@ int64_t gcd (int64_t x, int64_t y) {
 
   int64_t t;
   while (y != 0) {
-    t = x % y;  
-    x = y;  
+    t = x % y;
+    x = y;
     y = t;
     }
 
@@ -750,7 +752,7 @@ double upsample (FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int64
   free(rawoutbuf);
 
   if (dither != -1) {
-    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -0x80000000ULL };
+    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -(0x7fffffff) };
     static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,  0x7fffffffULL };
     double min = 0, max = 0;
     for(i=0;i<nch;i++) {
@@ -1303,8 +1305,8 @@ double downsample (FILE *fpi,FILE *fpo,int nch,int bps,int dbps,int64_t sfrq,int
   free(rawoutbuf);
 
   if (dither != -1) {
-    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -0x80000000ULL };
-    static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,  0x7fffffffULL };
+    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -(0x7FFFFFFF) };
+    static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,   0x7fffffffULL };
     double min = 0, max = 0;
     for(i=0;i<nch;i++) {
       double p[2];
@@ -1406,7 +1408,7 @@ double no_src (FILE *fpi,FILE *fpo,int nch,int bps,int dbps,double gain,int chun
   showprogress(1);
 
   if (dither != -1) {
-    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -0x80000000ULL };
+    static int64_t dlmin[] = { 0, -0x80, -0x8000, -0x800000, -(0x7fffffff) };
     static int64_t dlmax[] = { 0,  0x7f,  0x7fff,  0x7fffff,  0x7fffffffULL };
     double min = 0, max = 0;
     int i;
@@ -1435,7 +1437,7 @@ int extract_int (uint8_t *buf) {
 }
 //}}}
 //{{{
-unsigned int extract_uint (uint8_t *buf) { 
+unsigned int extract_uint (uint8_t *buf) {
 
   #ifndef BIGENDIAN
     return *(int *)buf;
@@ -1931,7 +1933,7 @@ int main (int argc, char **argv)
     if (dbps == 1) {min = -0x80; max = 0x7f;}
     if (dbps == 2) {min = -0x8000; max = 0x7fff;}
     if (dbps == 3) {min = -0x800000; max = 0x7fffff;}
-    if (dbps == 4) {min = -0x80000000; max = 0x7fffffff;}
+    if (dbps == 4) {min = -0x7fffffff; max = 0x7fffffff;}
     for(i=0;i<nch;i++) {
       shaper[i] = SSRCDither_init(dfrq, min, max, dither, pdf, noiseamp, 0);
       assert(shaper[i] != NULL);

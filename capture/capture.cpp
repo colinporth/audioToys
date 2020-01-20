@@ -9,14 +9,6 @@
 #include <string>
 #include <thread>
 
-extern "C" {
-  #include <libavcodec/avcodec.h>
-  #include <libavcodec/avcodec.h>
-  #include <libavformat/avformat.h>
-  #include <libavutil/timestamp.h>
-  #include <libswresample/swresample.h>
-  }
-
 #include "../../shared/utils/cLog.h"
 #include "../../shared/utils/cCaptureWASAPI.h"
 #include "../../shared/utils/audioHelpers.h"

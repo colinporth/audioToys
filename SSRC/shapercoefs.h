@@ -32,7 +32,6 @@ typedef struct DitherCoef {
 //{{{
 const DitherCoef ditherCoef[] = {
   //{{{
-
   {
     44100, 0,
     LIBDITHER_TYPE_ATH_A, "ATH Curve A, Intensity 0",
@@ -434,7 +433,6 @@ const DitherCoef ditherCoef[] = {
      -0.47882103919982910156,  0.35490813851356506348, -0.17496839165687561035,  0.060908168554306030273,
     },
   },
-
   //}}}
   //{{{
   {
@@ -465,10 +463,10 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+       0
     },
   },
   //}}}
-
   //{{{
   {
     48000, 0,
@@ -891,6 +889,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
   //}}}
@@ -1009,6 +1008,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
 
@@ -1140,6 +1140,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
 
@@ -1303,6 +1304,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
 
@@ -1378,6 +1380,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
 
@@ -1453,6 +1456,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
 
@@ -1532,6 +1536,7 @@ const DitherCoef ditherCoef[] = {
     LIBDITHER_TYPE_SIMPLE, "No shaper",
     0,
     {
+      0
     },
   },
 
@@ -1540,6 +1545,7 @@ const DitherCoef ditherCoef[] = {
     0, "End of the table",
     0,
     {
+      0
     },
   },
 //}}}
