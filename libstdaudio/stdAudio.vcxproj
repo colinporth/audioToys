@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\shared\utils\cLog.cpp" />
-    <ClCompile Include="print_devices.cpp" />
+    <ClCompile Include="melody.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\shared\utils\utils.h" />

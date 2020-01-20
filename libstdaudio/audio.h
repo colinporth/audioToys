@@ -33,7 +33,6 @@
 This is an implementation of std::span from P0122R7
 http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p0122r7.pdf
 */
-
 //          Copyright Tristan Brindle 2018.
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file ../../LICENSE_1_0.txt or copy at
@@ -922,24 +921,6 @@ template <typename _SampleType> struct audio_device_io {
   };
 //}}}
 
-// include "audio_device.h"
-class audio_device;
-class audio_device_list;
-inline std::optional<audio_device> get_default_audio_input_device();
-inline std::optional<audio_device> get_default_audio_output_device();
-inline audio_device_list get_audio_input_device_list();
-inline audio_device_list get_audio_output_device_list();
-//{{{
-enum class audio_device_list_event {
-  device_list_changed,
-  default_input_device_changed,
-  default_output_device_changed,
-  };
-//}}}
-
-template <typename F, typename = std::enable_if_t<std::is_invocable_v<F>>> void set_audio_device_list_callback (audio_device_list_event, F&&);
-
-// include "wasapi_backend.h"
 //{{{
 class __wasapi_util {
 public:
@@ -1643,9 +1624,16 @@ private:
   __wasapi_util::com_initializer _com_initializer;
   };
 //}}}
+//{{{
+enum class audio_device_list_event {
+  device_list_changed,
+  default_input_device_changed,
+  default_output_device_changed,
+  };
+//}}}
+template <typename F, typename = std::enable_if_t<std::is_invocable_v<F>>> void set_audio_device_list_callback (audio_device_list_event, F&&);
 
 class audio_device_list : public std::forward_list<audio_device> {};
-
 //{{{
 class __audio_device_monitor {
 public:
@@ -1937,7 +1925,7 @@ private:
 //}}}
 
 //{{{
-  std::optional<audio_device> get_default_audio_input_device() {
+std::optional<audio_device> get_default_audio_input_device() {
   return __audio_device_enumerator::get_default_input_device();
   }
 //}}}
@@ -1959,6 +1947,6 @@ audio_device_list get_audio_output_device_list() {
 
 //{{{
 template <typename F, typename /* = enable_if_t<is_invocable_v<F>> */> void set_audio_device_list_callback (audio_device_list_event event, F&& callback) {
-  __audio_device_monitor::instance().register_callback(event, std::move(callback));
+  __audio_device_monitor::instance().register_callback (event, std::move (callback));
   }
 //}}}
