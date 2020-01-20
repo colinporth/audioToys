@@ -5,13 +5,11 @@
 
 #include <random>
 #include <thread>
-#include <audio>
+#include "audio.h"
 
 // This example app outputs 5 seconds of white noise.
 
 int main() {
-  using namespace std::experimental;
-
   std::random_device rd;
   std::minstd_rand gen(rd());
   std::uniform_real_distribution<float> white_noise(-1.0f, 1.0f);

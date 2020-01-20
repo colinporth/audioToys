@@ -10,7 +10,7 @@
 #include <cmath>
 #include <array>
 #include <thread>
-#include <audio>
+#include "audio.h"
 
 // This example app plays a short melody using a simple square wave synthesiser.
 
@@ -72,8 +72,7 @@ private:
 
 
 int main() {
-  using namespace std::experimental;
-
+  
   auto device = get_default_audio_output_device();
   if (!device)
     return 1;

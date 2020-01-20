@@ -2,13 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="..\..\shared\utils\cLog.cpp" />
-    <ClCompile Include="examples\print_devices.cpp" />
+    <ClCompile Include="print_devices.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\shared\utils\cLog.h">
+    <ClInclude Include="..\..\shared\utils\utils.h">
       <Filter>h</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\shared\utils\utils.h">
+    <ClInclude Include="audio.h">
       <Filter>h</Filter>
     </ClInclude>
   </ItemGroup>

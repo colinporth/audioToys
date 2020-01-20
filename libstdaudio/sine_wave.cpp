@@ -9,13 +9,12 @@
 
 #include <cmath>
 #include <thread>
-#include <audio>
+#include "audio.h"
 #include <cmath>
 
 // This example app plays a sine wave of a given frequency for 5 seconds.
 
 int main() {
-  using namespace std::experimental;
 
   auto device = get_default_audio_output_device();
   if (!device)

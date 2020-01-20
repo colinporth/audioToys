@@ -8,7 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <thread>
-#include <audio>
+#include "audio.h"
 
 // This example app prints the current input level in regular intervals.
 
@@ -17,7 +17,6 @@ float gain_to_db(float gain) noexcept {
 }
 
 int main() {
-  using namespace std::experimental;
   std::atomic<float> max_abs_value = 0;
 
   auto device = get_default_audio_input_device();
