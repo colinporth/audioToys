@@ -820,11 +820,12 @@ public:
       _num_channels(num_channels),
       _stride(_num_channels),
       _is_contiguous(true) {
+
     assert (num_channels <= _max_num_channels);
     for (auto i = 0; i < _num_channels; ++i) {
       _channels[i] = data + i;
+      }
     }
-  }
   //}}}
   //{{{
   audio_buffer (sample_type* data, index_type num_frames, index_type num_channels, contiguous_deinterleaved_t)
@@ -832,11 +833,12 @@ public:
         _num_channels(num_channels),
         _stride(1),
         _is_contiguous(true) {
+
     assert (num_channels <= _max_num_channels);
     for (auto i = 0; i < _num_channels; ++i) {
       _channels[i] = data + (i * _num_frames);
+      }
     }
-  }
   //}}}
   //{{{
   audio_buffer (sample_type** data, index_type num_frames, index_type num_channels, ptr_to_ptr_deinterleaved_t)
@@ -844,58 +846,32 @@ public:
         _num_channels(num_channels),
         _stride(1),
         _is_contiguous(false) {
+
     assert (num_channels <= _max_num_channels);
     copy (data, data + _num_channels, _channels.begin());
-  }
+    }
   //}}}
 
-  //{{{
-  sample_type* data() const noexcept {
-    return _is_contiguous ? _channels[0] : nullptr;
-  }
-  //}}}
+  sample_type* data() const noexcept { return _is_contiguous ? _channels[0] : nullptr; }
 
-  //{{{
-  bool is_contiguous() const noexcept {
-    return _is_contiguous;
-  }
-  //}}}
-  //{{{
-  bool frames_are_contiguous() const noexcept {
-    return _stride == _num_channels;
-  }
-  //}}}
-  //{{{
-  bool channels_are_contiguous() const noexcept {
-    return _stride == 1;
-  }
-  //}}}
+  bool is_contiguous() const noexcept { return _is_contiguous; }
+  bool frames_are_contiguous() const noexcept { return _stride == _num_channels; }
+  bool channels_are_contiguous() const noexcept { return _stride == 1; }
 
-  //{{{
-  index_type size_frames() const noexcept {
-    return _num_frames;
-  }
-  //}}}
-  //{{{
-  index_type size_channels() const noexcept {
-    return _num_channels;
-  }
-  //}}}
-  //{{{
-  index_type size_samples() const noexcept {
-    return _num_channels * _num_frames;
-  }
-  //}}}
+  index_type size_frames() const noexcept { return _num_frames; }
+  index_type size_channels() const noexcept { return _num_channels; }
+  index_type size_samples() const noexcept { return _num_channels * _num_frames; }
 
   //{{{
   sample_type& operator() (index_type frame, index_type channel) noexcept {
+
     return const_cast<sample_type&>(std::as_const(*this).operator()(frame, channel));
-  }
+    }
   //}}}
   //{{{
   const sample_type& operator() (index_type frame, index_type channel) const noexcept {
     return _channels[channel][frame * _stride];
-  }
+    }
   //}}}
 
 private:
