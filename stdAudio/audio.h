@@ -96,24 +96,13 @@ namespace TCB_SPAN_NAMESPACE_NAME {
   #if defined(TCB_SPAN_THROW_ON_CONTRACT_VIOLATION)
     //{{{
     struct contract_violation_error : std::logic_error {
-        explicit contract_violation_error(const char* msg) : std::logic_error(msg)
-        {}
-    };
+      explicit contract_violation_error(const char* msg) : std::logic_error(msg) {}
+      };
     //}}}
-    //{{{
-    inline void contract_violation(const char* msg)
-    {
-        throw contract_violation_error(msg);
-    }
-    //}}}
+    inline void contract_violation(const char* msg) { throw contract_violation_error(msg); }
 
   #elif defined(TCB_SPAN_TERMINATE_ON_CONTRACT_VIOLATION)
-    //{{{
-    [[noreturn]] inline void contract_violation(const char* /*unused*/)
-    {
-        std::terminate();
-    }
-    //}}}
+    [[noreturn]] inline void contract_violation (const char* /*unused*/) { std::terminate(); }
   #endif
 
   //{{{  more defines
@@ -131,8 +120,7 @@ namespace TCB_SPAN_NAMESPACE_NAME {
     #define TCB_SPAN_INLINE_VAR
   #endif
 
-  #if defined(TCB_SPAN_HAVE_CPP14) ||                                                 \
-      (defined(__cpp_constexpr) && __cpp_constexpr >= 201304)
+  #if defined(TCB_SPAN_HAVE_CPP14) || (defined(__cpp_constexpr) && __cpp_constexpr >= 201304)
     #define TCB_SPAN_CONSTEXPR14 constexpr
   #else
     #define TCB_SPAN_CONSTEXPR14
@@ -176,27 +164,23 @@ namespace TCB_SPAN_NAMESPACE_NAME {
   namespace detail {
     //{{{
     template <typename E, std::ptrdiff_t S> struct span_storage {
-        constexpr span_storage() noexcept = default;
 
-        constexpr span_storage(E* ptr, std::ptrdiff_t /*unused*/) noexcept
-            : ptr(ptr)
-        {}
+      constexpr span_storage() noexcept = default;
+      constexpr span_storage(E* ptr, std::ptrdiff_t /*unused*/) noexcept : ptr(ptr) {}
 
-        E* ptr = nullptr;
-        static constexpr std::ptrdiff_t size = S;
-    };
+      E* ptr = nullptr;
+      static constexpr std::ptrdiff_t size = S;
+      };
     //}}}
     //{{{
     template <typename E> struct span_storage<E, dynamic_extent> {
-        constexpr span_storage() noexcept = default;
 
-        constexpr span_storage(E* ptr, std::ptrdiff_t size) noexcept
-            : ptr(ptr), size(size)
-        {}
+      constexpr span_storage() noexcept = default;
+      constexpr span_storage(E* ptr, std::ptrdiff_t size) noexcept : ptr(ptr), size(size) {}
 
-        E* ptr = nullptr;
-        std::ptrdiff_t size = 0;
-    };
+      E* ptr = nullptr;
+      std::ptrdiff_t size = 0;
+      };
     //}}}
 
     // Reimplementation of C++17 std::size() and std::data()
@@ -204,42 +188,12 @@ namespace TCB_SPAN_NAMESPACE_NAME {
       using std::data;
       using std::size;
     #else
-      //{{{
-      template <class C> constexpr auto size(const C& c) -> decltype(c.size())
-      {
-        return c.size();
-      }
-      //}}}
-      //{{{
-      template <class T, std::size_t N> constexpr std::size_t size(const T (&)[N]) noexcept
-      {
-          return N;
-      }
-      //}}}
-      //{{{
-      template <class C> constexpr auto data(C& c) -> decltype(c.data())
-      {
-          return c.data();
-      }
-      //}}}
-      //{{{
-      template <class C> constexpr auto data(const C& c) -> decltype(c.data())
-      {
-          return c.data();
-      }
-      //}}}
-      //{{{
-      template <class T, std::size_t N> constexpr T* data(T (&array)[N]) noexcept
-      {
-          return array;
-      }
-      //}}}
-      //{{{
-      template <class E> constexpr const E* data(std::initializer_list<E> il) noexcept
-      {
-          return il.begin();
-      }
-      //}}}
+      template <class C> constexpr auto size(const C& c) -> decltype (c.size()) { return c.size(); }
+      template <class T, std::size_t N> constexpr std::size_t size (const T (&)[N]) noexcept { return N; }
+      template <class C> constexpr auto data(C& c) -> decltype (c.data()) { return c.data(); }
+      template <class C> constexpr auto data(const C& c) -> decltype (c.data()) { return c.data(); }
+      template <class T, std::size_t N> constexpr T* data (T (&array)[N]) noexcept { return array; }
+      template <class E> constexpr const E* data (std::initializer_list<E> il) noexcept { return il.begin(); }
     #endif
 
     #if defined(TCB_SPAN_HAVE_CPP17) || defined(__cpp_lib_void_t)
@@ -836,9 +790,11 @@ public:
 
 private:
   bool _is_contiguous = false;
+
   index_type _num_frames = 0;
   index_type _num_channels = 0;
   index_type _stride = 0;
+
   constexpr static size_t _max_num_channels = 16;
   std::array<sample_type*, _max_num_channels> _channels = {};
   };
@@ -861,39 +817,39 @@ template <typename _SampleType> struct audio_device_io {
 class __wasapi_util {
 public:
   //{{{
-  static const CLSID& get_MMDeviceEnumerator_classid()
-  {
+  static const CLSID& get_MMDeviceEnumerator_classid() {
+
     static const CLSID MMDeviceEnumerator_class_id = __uuidof(MMDeviceEnumerator);
     return MMDeviceEnumerator_class_id;
-  }
+    }
   //}}}
   //{{{
-  static const IID& get_IMMDeviceEnumerator_interface_id()
-  {
+  static const IID& get_IMMDeviceEnumerator_interface_id() {
+
     static const IID IMMDeviceEnumerator_interface_id = __uuidof(IMMDeviceEnumerator);
     return IMMDeviceEnumerator_interface_id;
-  }
+    }
   //}}}
   //{{{
-  static const IID& get_IAudioClient_interface_id()
-  {
+  static const IID& get_IAudioClient_interface_id() {
+
     static const IID IAudioClient_interface_id = __uuidof(IAudioClient);
     return IAudioClient_interface_id;
-  }
+    }
   //}}}
   //{{{
-  static const IID& get_IAudioRenderClient_interface_id()
-  {
+  static const IID& get_IAudioRenderClient_interface_id() {
+
     static const IID IAudioRenderClient_interface_id = __uuidof(IAudioRenderClient);
     return IAudioRenderClient_interface_id;
-  }
+    }
   //}}}
   //{{{
-  static const IID& get_IAudioCaptureClient_interface_id()
-  {
+  static const IID& get_IAudioCaptureClient_interface_id() {
+
     static const IID IAudioCaptureClient_interface_id = __uuidof(IAudioCaptureClient);
     return IAudioCaptureClient_interface_id;
-  }
+    }
   //}}}
 
   //{{{
@@ -924,32 +880,33 @@ public:
   //}}}
 
   //{{{
-  static std::string convert_string (const wchar_t* wide_string)
-  {
-    int required_characters = WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, nullptr, 0, nullptr, nullptr);
+  static std::string convert_string (const wchar_t* wide_string) {
+
+    int required_characters = WideCharToMultiByte (CP_UTF8, 0, wide_string, -1, nullptr, 0, nullptr, nullptr);
     if (required_characters <= 0)
       return {};
 
     std::string output;
     output.resize(static_cast<size_t>(required_characters));
-    WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, output.data(), static_cast<int>(output.size()), nullptr, nullptr);
+    WideCharToMultiByte (CP_UTF8, 0, wide_string, -1, output.data(), static_cast<int>(output.size()), nullptr, nullptr);
     return output;
-  }
+    }
   //}}}
   //{{{
-  static std::string convert_string (const std::wstring& input)
-  {
-    int required_characters = WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), nullptr, 0, nullptr, nullptr);
+  static std::string convert_string (const std::wstring& input) {
+
+    int required_characters = WideCharToMultiByte (CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), nullptr, 0, nullptr, nullptr);
     if (required_characters <= 0)
       return {};
 
     std::string output;
-    output.resize(static_cast<size_t>(required_characters));
-    WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), output.data(), static_cast<int>(output.size()), nullptr, nullptr);
+    output.resize (static_cast<size_t>(required_characters));
+    WideCharToMultiByte (CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), output.data(), static_cast<int>(output.size()), nullptr, nullptr);
+
     return output;
-  }
+    }
   //}}}
-};
+  };
 //}}}
 //{{{
 struct audio_device_exception : public std::runtime_error {
@@ -961,8 +918,8 @@ struct audio_device_exception : public std::runtime_error {
 class audio_device {
 public:
   audio_device() = delete;
-  audio_device(const audio_device&) = delete;
-  audio_device& operator=(const audio_device&) = delete;
+  audio_device (const audio_device&) = delete;
+  audio_device& operator= (const audio_device&) = delete;
 
   //{{{
   audio_device (audio_device&& other) :
@@ -989,7 +946,7 @@ public:
   }
   //}}}
   //{{{
-  audio_device& operator = (audio_device&& other) noexcept {
+  audio_device& operator= (audio_device&& other) noexcept {
 
     if (this == &other)
       return *this;
@@ -1089,7 +1046,7 @@ public:
   }
   //}}}
   //{{{
-  bool set_sample_rate(sample_rate_t new_sample_rate)
+  bool set_sample_rate (sample_rate_t new_sample_rate)
   {
     _mix_format.Format.nSamplesPerSec = new_sample_rate;
     _fixup_mix_format();
@@ -1173,7 +1130,7 @@ public:
   //}}}
 
   // TODO: remove std::function as soon as C++20 default-ctable lambda and lambda in unevaluated contexts become available
-  using no_op_t = std::function<void(audio_device&)>;
+  using no_op_t = std::function<void (audio_device&)>;
   //{{{  template bool start (
   template <typename _StartCallbackType = no_op_t, typename _StopCallbackType = no_op_t,
     // TODO: is_nothrow_invocable_t does not compile, temporarily replaced with is_invocable_t
@@ -1186,7 +1143,7 @@ public:
       return false;
 
     if (!_running) {
-      _event_handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+      _event_handle = CreateEvent (nullptr, FALSE, FALSE, nullptr);
       if (_event_handle == nullptr)
         return false;
 
@@ -1213,7 +1170,7 @@ public:
       hr = _audio_client->GetBufferSize(&_buffer_frame_count);
       if (FAILED (hr))
         return false;
-      hr = _audio_client->SetEventHandle(_event_handle);
+      hr = _audio_client->SetEventHandle (_event_handle);
       if (FAILED (hr))
         return false;
       hr = _audio_client->Start();
@@ -1250,16 +1207,16 @@ public:
       if (_audio_client != nullptr)
         _audio_client->Stop();
       if (_event_handle != nullptr)
-        CloseHandle(_event_handle);
+        CloseHandle (_event_handle);
 
-      _stop_callback(*this);
+      _stop_callback (*this);
       }
 
     return true;
     }
   //}}}
   bool is_running() const noexcept { return _running; }
-  void wait() const { WaitForSingleObject(_event_handle, INFINITE); }
+  void wait() const { WaitForSingleObject (_event_handle, INFINITE); }
 
   //{{{  template void float process (const _CallbackType& callback)
   template <typename _CallbackType,
