@@ -151,8 +151,8 @@ int main() {
   synth.set_sample_rate (float(device->get_sample_rate()));
 
   std::random_device rd;
-  std::minstd_rand gen(rd());
-  std::uniform_real_distribution<float> white_noise(-1.0f, 1.0f);
+  std::minstd_rand gen (rd());
+  std::uniform_real_distribution<float> white_noise (-1.0f, 1.0f);
 
   float frequency_hz = 440.0f;
   float delta = 2.0f * frequency_hz * float(M_PI / device->get_sample_rate());
