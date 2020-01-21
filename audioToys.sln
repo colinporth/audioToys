@@ -11,7 +11,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "transcode", "transcodeToAac
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ReSampler", "ReSampler\ReSampler.vcxproj", "{6E44EB91-C0E6-411F-B75F-D445812D60AC}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stdAudio", "libstdaudio\stdAudio.vcxproj", "{F76BE4ED-CBB9-4F6E-AE99-D50705528614}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stdAudio", "stdAudio\stdAudio.vcxproj", "{F76BE4ED-CBB9-4F6E-AE99-D50705528614}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

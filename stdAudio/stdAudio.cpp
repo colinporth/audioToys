@@ -12,6 +12,7 @@
 #include <cmath>
 #include <array>
 #include <thread>
+#include <random>
 #include "audio.h"
 //}}}
 
@@ -60,7 +61,7 @@ void print_device_info (const audio_device& d) {
 //{{{
 void print_device_list (const audio_device_list& list) {
 
-  for (auto& item : list) 
+  for (auto& item : list)
     print_device_info(item);
   }
 //}}}
@@ -100,7 +101,7 @@ struct synthesiser {
     }
   //}}}
   //{{{
-  void set_sample_rate(float sample_rate) {
+  void set_sample_rate (float sample_rate) {
 
     _sample_rate = sample_rate;
     update();
@@ -149,21 +150,39 @@ int main() {
   auto synth = synthesiser();
   synth.set_sample_rate (float(device->get_sample_rate()));
 
+  std::random_device rd;
+  std::minstd_rand gen(rd());
+  std::uniform_real_distribution<float> white_noise(-1.0f, 1.0f);
+
+  float frequency_hz = 440.0f;
+  float delta = 2.0f * frequency_hz * float(M_PI / device->get_sample_rate());
+  float phase = 0;
+
   device->connect([=] (audio_device&, audio_device_io<float>& io) mutable noexcept {
     if (!io.output_buffer.has_value())
       return;
 
     auto& out = *io.output_buffer;
-
     for (int frame = 0; frame < out.size_frames(); ++frame) {
       auto next_sample = synth.get_next_sample();
       for (int channel = 0; channel < out.size_channels(); ++channel)
         out (frame, channel) = next_sample;
       }
+
+    for (int frame = 0; frame < out.size_frames(); ++frame) {
+      float next_sample = std::sin (phase);
+      phase = std::fmod (phase + delta, 2.0f * static_cast<float>(M_PI));
+      for (int channel = 0; channel < out.size_channels(); ++channel)
+        out (frame, channel) = 0.2f * next_sample;
+      }
+
+    for (int frame = 0; frame < out.size_frames(); ++frame)
+      for (int channel = 0; channel < out.size_channels(); ++channel)
+        out (frame, channel) = white_noise(gen);
     });
 
   device->start();
   while (!stop.load()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
   }
-}
