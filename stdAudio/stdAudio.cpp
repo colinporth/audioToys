@@ -62,16 +62,17 @@ void print_device_info (const audio_device& d) {
 void print_device_list (const audio_device_list& list) {
 
   for (auto& item : list)
-    print_device_info(item);
+    print_device_info (item);
   }
 //}}}
 //{{{
 void print_all_devices() {
+
   std::cout << "Input devices:\n==============\n";
-  print_device_list(get_audio_input_device_list());
+  print_device_list (get_audio_input_device_list());
 
   std::cout << "\nOutput devices:\n===============\n";
-  print_device_list(get_audio_output_device_list());
+  print_device_list (get_audio_output_device_list());
   }
 //}}}
 
@@ -129,19 +130,23 @@ int main() {
   print_all_devices();
 
   set_audio_device_list_callback (audio_device_list_event::device_list_changed, [] {
+    //{{{
     std::cout << "\n=== Audio device list changed! ===\n\n";
     print_all_devices();
     });
-
+    //}}}
   set_audio_device_list_callback (audio_device_list_event::default_input_device_changed, [] {
+    //{{{
     std::cout << "\n=== Default input device changed! ===\n\n";
     print_all_devices();
     });
-
+    //}}}
   set_audio_device_list_callback (audio_device_list_event::default_output_device_changed, [] {
+    //{{{
     std::cout << "\n=== Default output device changed! ===\n\n";
     print_all_devices();
     });
+    //}}}
 
   auto device = get_default_audio_output_device();
   if (!device)
@@ -165,22 +170,25 @@ int main() {
       return;
 
     auto& out = *io.output_buffer;
+    // elody
     for (int frame = 0; frame < out.size_frames(); ++frame) {
       auto next_sample = synth.get_next_sample();
       for (int channel = 0; channel < out.size_channels(); ++channel)
         out (frame, channel) = next_sample;
       }
-
-    for (int frame = 0; frame < out.size_frames(); ++frame) {
-      float next_sample = std::sin (phase);
-      phase = std::fmod (phase + delta, 2.0f * static_cast<float>(M_PI));
-      for (int channel = 0; channel < out.size_channels(); ++channel)
-        out (frame, channel) = 0.2f * next_sample;
-      }
-
-    for (int frame = 0; frame < out.size_frames(); ++frame)
-      for (int channel = 0; channel < out.size_channels(); ++channel)
-        out (frame, channel) = white_noise (gen);
+    //{{{  sine
+    //for (int frame = 0; frame < out.size_frames(); ++frame) {
+      //float next_sample = std::sin (phase);
+      //phase = std::fmod (phase + delta, 2.0f * static_cast<float>(M_PI));
+      //for (int channel = 0; channel < out.size_channels(); ++channel)
+        //out (frame, channel) = 0.2f * next_sample;
+      //}
+    //}}}
+    //{{{  noise
+    //for (int frame = 0; frame < out.size_frames(); ++frame)
+      //for (int channel = 0; channel < out.size_channels(); ++channel)
+        //out (frame, channel) = white_noise (gen);
+    //}}}
     });
 
   device->start();

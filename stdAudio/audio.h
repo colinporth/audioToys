@@ -1062,31 +1062,28 @@ public:
   constexpr bool can_connect() const noexcept { return true; }
   constexpr bool can_process() const noexcept { return true; }
   //{{{  template float void connect (_CallbackType callback)
-  template <typename _CallbackType,
-    std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<float>&>, int> = 0>
-  void connect(_CallbackType callback)
-  {
+  template <typename _CallbackType, std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<float>&>, int> = 0>
+  void connect (_CallbackType callback) {
+
     _set_sample_type_helper<float>();
-    _connect_helper(__wasapi_float_callback_t{callback});
-  }
+    _connect_helper (__wasapi_float_callback_t { callback } );
+    }
   //}}}
   //{{{  template int32_t void connect (_CallbackType callback
-  template <typename _CallbackType,
-    std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<int32_t>&>, int> = 0>
-  void connect(_CallbackType callback)
-  {
+  template <typename _CallbackType, std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<int32_t>&>, int> = 0>
+  void connect (_CallbackType callback) {
+
     _set_sample_type_helper<int32_t>();
-    _connect_helper(__wasapi_int32_callback_t{callback});
-  }
+    _connect_helper (__wasapi_int32_callback_t { callback } );
+    }
   //}}}
   //{{{  template int16_t void connect (_CallbackType callback
-  template <typename _CallbackType,
-    std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<int16_t>&>, int> = 0>
-  void connect(_CallbackType callback)
-  {
+  template <typename _CallbackType, std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<int16_t>&>, int> = 0>
+  void connect (_CallbackType callback) {
+
     _set_sample_type_helper<int16_t>();
-    _connect_helper(__wasapi_int16_callback_t{ callback });
-  }
+    _connect_helper (__wasapi_int16_callback_t { callback } );
+    }
   //}}}
 
   // TODO: remove std::function as soon as C++20 default-ctable lambda and lambda in unevaluated contexts become available
@@ -1323,7 +1320,7 @@ private:
     if (_running)
       throw audio_device_exception ("Cannot connect to running audio_device.");
 
-    _user_callback = move(callback);
+    _user_callback = move (callback);
     }
   //}}}
   //{{{
