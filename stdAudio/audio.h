@@ -7,23 +7,28 @@
 #pragma once
 //{{{  includes
 #define NOMINMAX
+
 #include <optional>
 #include <cassert>
 #include <chrono>
 #include <cctype>
 #include <codecvt>
+
 #include <string>
 #include <iostream>
 #include <vector>
+
 #include <functional>
 #include <thread>
 #include <forward_list>
 #include <atomic>
 #include <string_view>
+
 #include <initguid.h>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <Functiondiscoverykeys_devpkey.h>
+
 #include <variant>
 #include <array>
 //}}}
@@ -730,36 +735,25 @@ public:
 
   //{{{
   audio_buffer (sample_type* data, index_type num_frames, index_type num_channels, contiguous_interleaved_t)
-    : _num_frames(num_frames),
-      _num_channels(num_channels),
-      _stride(_num_channels),
-      _is_contiguous(true) {
+      : _num_frames(num_frames), _num_channels(num_channels), _stride(_num_channels), _is_contiguous(true) {
 
     assert (num_channels <= _max_num_channels);
-    for (auto i = 0; i < _num_channels; ++i) {
+    for (auto i = 0; i < _num_channels; ++i)
       _channels[i] = data + i;
-      }
     }
   //}}}
   //{{{
   audio_buffer (sample_type* data, index_type num_frames, index_type num_channels, contiguous_deinterleaved_t)
-      : _num_frames(num_frames),
-        _num_channels(num_channels),
-        _stride(1),
-        _is_contiguous(true) {
+      : _num_frames(num_frames), _num_channels(num_channels), _stride(1), _is_contiguous(true) {
 
     assert (num_channels <= _max_num_channels);
-    for (auto i = 0; i < _num_channels; ++i) {
+    for (auto i = 0; i < _num_channels; ++i)
       _channels[i] = data + (i * _num_frames);
-      }
     }
   //}}}
   //{{{
   audio_buffer (sample_type** data, index_type num_frames, index_type num_channels, ptr_to_ptr_deinterleaved_t)
-      : _num_frames(num_frames),
-        _num_channels(num_channels),
-        _stride(1),
-        _is_contiguous(false) {
+      : _num_frames(num_frames), _num_channels(num_channels), _stride(1), _is_contiguous(false) {
 
     assert (num_channels <= _max_num_channels);
     copy (data, data + _num_channels, _channels.begin());
@@ -784,6 +778,7 @@ public:
   //}}}
   //{{{
   const sample_type& operator() (index_type frame, index_type channel) const noexcept {
+
     return _channels[channel][frame * _stride];
     }
   //}}}
@@ -889,6 +884,7 @@ public:
     std::string output;
     output.resize(static_cast<size_t>(required_characters));
     WideCharToMultiByte (CP_UTF8, 0, wide_string, -1, output.data(), static_cast<int>(output.size()), nullptr, nullptr);
+
     return output;
     }
   //}}}
@@ -908,6 +904,7 @@ public:
   //}}}
   };
 //}}}
+
 //{{{
 struct audio_device_exception : public std::runtime_error {
   explicit audio_device_exception (const char* what) : runtime_error(what) { }
@@ -992,32 +989,13 @@ public:
     }
   //}}}
 
-  //{{{
-  std::string_view name() const noexcept
-  {
-    return _name;
-  }
-  //}}}
+  std::string_view name() const noexcept { return _name; }
 
   using device_id_t = std::wstring;
-  //{{{
-  device_id_t device_id() const noexcept {
-    return _device_id;
-    }
-  //}}}
+  device_id_t device_id() const noexcept { return _device_id; }
 
-  //{{{
-  bool is_input() const noexcept
-  {
-    return _is_render_device == false;
-  }
-  //}}}
-  //{{{
-  bool is_output() const noexcept
-  {
-    return _is_render_device == true;
-  }
-  //}}}
+  bool is_input() const noexcept { return _is_render_device == false; }
+  bool is_output() const noexcept { return _is_render_device == true; }
 
   //{{{
   int get_num_input_channels() const noexcept {
@@ -1039,27 +1017,18 @@ public:
   //}}}
 
   using sample_rate_t = DWORD;
+  sample_rate_t get_sample_rate() const noexcept { return _mix_format.Format.nSamplesPerSec; }
   //{{{
-  sample_rate_t get_sample_rate() const noexcept
-  {
-    return _mix_format.Format.nSamplesPerSec;
-  }
-  //}}}
-  //{{{
-  bool set_sample_rate (sample_rate_t new_sample_rate)
-  {
+  bool set_sample_rate (sample_rate_t new_sample_rate) {
     _mix_format.Format.nSamplesPerSec = new_sample_rate;
     _fixup_mix_format();
     return true;
-  }
+    }
   //}}}
 
   using buffer_size_t = UINT32;
   //{{{
-  buffer_size_t get_buffer_size_frames() const noexcept
-  {
-    return _buffer_frame_count;
-  }
+  buffer_size_t get_buffer_size_frames() const noexcept { return _buffer_frame_count; }
   //}}}
   //{{{
   bool set_buffer_size_frames (buffer_size_t new_buffer_size)
@@ -1090,17 +1059,8 @@ public:
     return _mix_format_matches_type<_SampleType>();
     }
   //}}}
-  //{{{
-  constexpr bool can_connect() const noexcept {
-    return true;
-    }
-  //}}}
-  //{{{
-  constexpr bool can_process() const noexcept {
-
-    return true;
-    }
-  //}}}
+  constexpr bool can_connect() const noexcept { return true; }
+  constexpr bool can_process() const noexcept { return true; }
   //{{{  template float void connect (_CallbackType callback)
   template <typename _CallbackType,
     std::enable_if_t<std::is_nothrow_invocable_v<_CallbackType, audio_device&, audio_device_io<float>&>, int> = 0>
@@ -1356,6 +1316,7 @@ private:
     _mix_format.Format.nAvgBytesPerSec = _mix_format.Format.nSamplesPerSec * _mix_format.Format.wBitsPerSample * _mix_format.Format.nChannels / 8;
     }
   //}}}
+
   //{{{
   template<typename _CallbackType> void _connect_helper (_CallbackType callback) {
 
@@ -1384,7 +1345,7 @@ private:
     }
   //}}}
   //{{{
-  template<typename _SampleType, typename _CallbackType> void _process_helper(const _CallbackType& callback) {
+  template<typename _SampleType, typename _CallbackType> void _process_helper (const _CallbackType& callback) {
 
     if (_audio_client == nullptr)
       return;
@@ -1470,6 +1431,7 @@ private:
   IAudioCaptureClient* _audio_capture_client = nullptr;
   IAudioRenderClient* _audio_render_client = nullptr;
   HANDLE _event_handle;
+
   std::wstring _device_id;
   std::atomic<bool> _running = false;
   std::string _name;
@@ -1490,6 +1452,7 @@ private:
   __wasapi_util::com_initializer _com_initializer;
   };
 //}}}
+
 //{{{
 enum class audio_device_list_event {
   device_list_changed,
@@ -1504,24 +1467,24 @@ class audio_device_list : public std::forward_list<audio_device> {};
 class __audio_device_monitor {
 public:
   //{{{
-  static __audio_device_monitor& instance()
-  {
+  static __audio_device_monitor& instance() {
+
     static __audio_device_monitor singleton;
     return singleton;
-  }
+    }
   //}}}
 
   //{{{
-  template <typename F> void register_callback(audio_device_list_event event, F&& callback)
-  {
-    _callback_monitors[static_cast<int>(event)].reset(new WASAPINotificationClient{_enumerator, event, std::move(callback)});
-  }
+  template <typename F> void register_callback (audio_device_list_event event, F&& callback) {
+
+    _callback_monitors[static_cast<int>(event)].reset (new WASAPINotificationClient{_enumerator, event, std::move(callback)});
+    }
   //}}}
   //{{{
-  template <> void register_callback(audio_device_list_event event, nullptr_t&&)
-  {
+  template <> void register_callback (audio_device_list_event event, nullptr_t&&) {
+
     _callback_monitors[static_cast<int>(event)].reset();
-  }
+    }
   //}}}
 
 private:
@@ -1550,7 +1513,7 @@ private:
   class WASAPINotificationClient : public IMMNotificationClient {
   public:
     //{{{
-    WASAPINotificationClient(IMMDeviceEnumerator* enumerator, audio_device_list_event event, std::function<void()> callback) :
+    WASAPINotificationClient (IMMDeviceEnumerator* enumerator, audio_device_list_event event, std::function<void()> callback) :
         _enumerator(enumerator), _event(event), _callback(std::move(callback)) {
 
       if (_enumerator == nullptr)
@@ -1560,14 +1523,14 @@ private:
       }
     //}}}
     //{{{
-    virtual ~WASAPINotificationClient()
-    {
-      _enumerator->UnregisterEndpointNotificationCallback(this);
-    }
+    virtual ~WASAPINotificationClient() {
+
+      _enumerator->UnregisterEndpointNotificationCallback (this);
+      }
     //}}}
 
     //{{{
-    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, [[maybe_unused]] LPCWSTR device_id) {
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged (EDataFlow flow, ERole role, [[maybe_unused]] LPCWSTR device_id) {
 
       if (role != ERole::eConsole)
         return S_OK;
@@ -1587,7 +1550,7 @@ private:
     //}}}
 
     //{{{
-    HRESULT STDMETHODCALLTYPE OnDeviceAdded([[maybe_unused]] LPCWSTR device_id) {
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded ([[maybe_unused]] LPCWSTR device_id) {
 
       if (_event != audio_device_list_event::device_list_changed)
         return S_OK;
@@ -1597,7 +1560,7 @@ private:
       }
     //}}}
     //{{{
-    HRESULT STDMETHODCALLTYPE OnDeviceRemoved([[maybe_unused]] LPCWSTR device_id) {
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved ([[maybe_unused]] LPCWSTR device_id) {
 
       if (_event != audio_device_list_event::device_list_changed)
         return S_OK;
@@ -1607,24 +1570,25 @@ private:
       }
     //}}}
     //{{{
-    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged([[maybe_unused]] LPCWSTR device_id, [[maybe_unused]] DWORD new_state) {
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged ([[maybe_unused]] LPCWSTR device_id, [[maybe_unused]] DWORD new_state) {
 
       if (_event != audio_device_list_event::device_list_changed)
         return S_OK;
 
       _callback();
+
       return S_OK;
       }
     //}}}
     //{{{
-    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged([[maybe_unused]] LPCWSTR device_id, [[maybe_unused]] const PROPERTYKEY key) {
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged ([[maybe_unused]] LPCWSTR device_id, [[maybe_unused]] const PROPERTYKEY key) {
 
       return S_OK;
       }
     //}}}
 
     //{{{
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID **requested_interface) {
+    HRESULT STDMETHODCALLTYPE QueryInterface (REFIID riid, VOID **requested_interface) {
 
       if (IID_IUnknown == riid)
         *requested_interface = (IUnknown*)this;
@@ -1800,16 +1764,8 @@ std::optional<audio_device> get_default_audio_output_device() {
   return __audio_device_enumerator::get_default_output_device();
   }
 //}}}
-//{{{
-audio_device_list get_audio_input_device_list() {
-  return __audio_device_enumerator::get_input_device_list();
-  }
-//}}}
-//{{{
-audio_device_list get_audio_output_device_list() {
-  return __audio_device_enumerator::get_output_device_list();
-  }
-//}}}
+audio_device_list get_audio_input_device_list() { return __audio_device_enumerator::get_input_device_list(); }
+audio_device_list get_audio_output_device_list() { return __audio_device_enumerator::get_output_device_list(); }
 
 //{{{
 template <typename F, typename /* = enable_if_t<is_invocable_v<F>> */> void set_audio_device_list_callback (audio_device_list_event event, F&& callback) {

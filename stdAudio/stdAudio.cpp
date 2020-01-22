@@ -128,12 +128,12 @@ private:
 int main() {
   print_all_devices();
 
-  set_audio_device_list_callback (audio_device_list_event::device_list_changed, []{
+  set_audio_device_list_callback (audio_device_list_event::device_list_changed, [] {
     std::cout << "\n=== Audio device list changed! ===\n\n";
     print_all_devices();
     });
 
-  set_audio_device_list_callback (audio_device_list_event::default_input_device_changed, []{
+  set_audio_device_list_callback (audio_device_list_event::default_input_device_changed, [] {
     std::cout << "\n=== Default input device changed! ===\n\n";
     print_all_devices();
     });
@@ -147,8 +147,10 @@ int main() {
   if (!device)
     return 1;
 
+  device->set_sample_rate (44100);
+
   auto synth = synthesiser();
-  synth.set_sample_rate (float(device->get_sample_rate()));
+  synth.set_sample_rate (float (device->get_sample_rate()));
 
   std::random_device rd;
   std::minstd_rand gen (rd());
@@ -178,11 +180,11 @@ int main() {
 
     for (int frame = 0; frame < out.size_frames(); ++frame)
       for (int channel = 0; channel < out.size_channels(); ++channel)
-        out (frame, channel) = white_noise(gen);
+        out (frame, channel) = white_noise (gen);
     });
 
   device->start();
   while (!stop.load()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for (std::chrono::milliseconds(50));
     }
   }
