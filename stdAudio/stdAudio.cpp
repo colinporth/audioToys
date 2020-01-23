@@ -37,45 +37,46 @@ float note_to_frequency_hz (int note) {
 //}}}
 
 //{{{
-bool isDefaultDevice (const cAudioDevice& d) {
+bool isDefaultDevice (const cAudioDevice& device) {
 
-  if (d.isInput()) {
-    auto default_in = getDefaultAudioInputDevice();
-    return default_in.has_value() && d.getDeviceId() == default_in->getDeviceId();
+  if (device.isInput()) {
+    auto defaultInputDevice = getDefaultAudioInputDevice();
+    return defaultInputDevice.has_value() && (device.getDeviceId() == defaultInputDevice->getDeviceId());
     }
-  else if (d.isOutput()) {
-    auto default_out = getDefaultAudioOutputDevice();
-    return default_out.has_value() && d.getDeviceId() == default_out->getDeviceId();
+
+  else if (device.isOutput()) {
+    auto defaultOutputDevice = getDefaultAudioOutputDevice();
+    return defaultOutputDevice.has_value() && (device.getDeviceId() == defaultOutputDevice->getDeviceId());
     }
 
   return false;
   }
 //}}}
 //{{{
-void print_device_info (const cAudioDevice& d) {
+void printDeviceInfo (const cAudioDevice& device) {
 
-  cout << "- \"" << d.getName() << "\", ";
-  cout << "sample rate = " << d.getSampleRate() << " Hz, ";
-  cout << "buffer size = " << d.getBufferSizeFrames() << " frames, ";
-  cout << (d.isInput() ? d.getNumInputChannels() : d.getNumOutputChannels()) << " channels";
-  cout << (isDefaultDevice(d) ? " [DEFAULT DEVICE]\n" : "\n");
+  cout << device.getName();
+  cout << " sampleRate = " << device.getSampleRate() << "Hz";
+  cout << " bufferSize = " << device.getBufferSizeFrames() << " frames ";
+  cout << (device.isInput() ? device.getNumInputChannels() : device.getNumOutputChannels()) << " chans";
+  cout << (isDefaultDevice (device) ? " default\n" : "\n");
   };
 //}}}
 //{{{
-void print_device_list (const cAudioDeviceList& list) {
+void printDeviceList (const cAudioDeviceList& deviceList) {
 
-  for (auto& item : list)
-    print_device_info (item);
+  for (auto& device : deviceList)
+    printDeviceInfo (device);
   }
 //}}}
 //{{{
-void print_all_devices() {
+void printAllDevices() {
 
-  cout << "Input devices:\n==============\n";
-  print_device_list (getAudioInputDeviceList());
+  cout << "Input devices\n";
+  printDeviceList (getAudioInputDeviceList());
 
-  cout << "\nOutput devices:\n===============\n";
-  print_device_list (getAudioOutputDeviceList());
+  cout << "\nOutput devices\n";
+  printDeviceList (getAudioOutputDeviceList());
   }
 //}}}
 
@@ -130,24 +131,24 @@ private:
 //}}}
 
 int main() {
-  print_all_devices();
+  printAllDevices();
 
   setAudioDeviceListCallback(cAudioDeviceListEvent::eListChanged, [] {
     //{{{
     cout << "\n=== Audio device list changed! ===\n\n";
-    print_all_devices();
+    printAllDevices();
     });
     //}}}
   setAudioDeviceListCallback(cAudioDeviceListEvent::eDefaultInputChanged, [] {
     //{{{
     cout << "\n=== Default input device changed! ===\n\n";
-    print_all_devices();
+    printAllDevices();
     });
     //}}}
   setAudioDeviceListCallback(cAudioDeviceListEvent::eDefaultOutputChanged, [] {
     //{{{
     cout << "\n=== Default output device changed! ===\n\n";
-    print_all_devices();
+    printAllDevices();
     });
     //}}}
 
