@@ -37,32 +37,32 @@ float note_to_frequency_hz (int note) {
 //}}}
 
 //{{{
-bool is_default_device (const audio_device& d) {
+bool isDefaultDevice (const cAudioDevice& d) {
 
-  if (d.is_input()) {
-    auto default_in = get_default_audio_input_device();
-    return default_in.has_value() && d.device_id() == default_in->device_id();
+  if (d.isInput()) {
+    auto default_in = getDefaultAudioInputDevice();
+    return default_in.has_value() && d.getDeviceId() == default_in->getDeviceId();
     }
-  else if (d.is_output()) {
-    auto default_out = get_default_audio_output_device();
-    return default_out.has_value() && d.device_id() == default_out->device_id();
+  else if (d.isOutput()) {
+    auto default_out = getDefaultAudioOutputDevice();
+    return default_out.has_value() && d.getDeviceId() == default_out->getDeviceId();
     }
 
   return false;
   }
 //}}}
 //{{{
-void print_device_info (const audio_device& d) {
+void print_device_info (const cAudioDevice& d) {
 
-  cout << "- \"" << d.name() << "\", ";
-  cout << "sample rate = " << d.get_sample_rate() << " Hz, ";
-  cout << "buffer size = " << d.get_buffer_size_frames() << " frames, ";
-  cout << (d.is_input() ? d.get_num_input_channels() : d.get_num_output_channels()) << " channels";
-  cout << (is_default_device(d) ? " [DEFAULT DEVICE]\n" : "\n");
+  cout << "- \"" << d.getName() << "\", ";
+  cout << "sample rate = " << d.getSampleRate() << " Hz, ";
+  cout << "buffer size = " << d.getBufferSizeFrames() << " frames, ";
+  cout << (d.isInput() ? d.getNumInputChannels() : d.getNumOutputChannels()) << " channels";
+  cout << (isDefaultDevice(d) ? " [DEFAULT DEVICE]\n" : "\n");
   };
 //}}}
 //{{{
-void print_device_list (const audio_device_list& list) {
+void print_device_list (const cAudioDeviceList& list) {
 
   for (auto& item : list)
     print_device_info (item);
@@ -72,10 +72,10 @@ void print_device_list (const audio_device_list& list) {
 void print_all_devices() {
 
   cout << "Input devices:\n==============\n";
-  print_device_list (get_audio_input_device_list());
+  print_device_list (getAudioInputDeviceList());
 
   cout << "\nOutput devices:\n===============\n";
-  print_device_list (get_audio_output_device_list());
+  print_device_list (getAudioOutputDeviceList());
   }
 //}}}
 
@@ -132,50 +132,54 @@ private:
 int main() {
   print_all_devices();
 
-  set_audio_device_list_callback (audio_device_list_event::device_list_changed, [] {
+  setAudioDeviceListCallback(cAudioDeviceListEvent::eListChanged, [] {
     //{{{
     cout << "\n=== Audio device list changed! ===\n\n";
     print_all_devices();
     });
     //}}}
-  set_audio_device_list_callback (audio_device_list_event::default_input_device_changed, [] {
+  setAudioDeviceListCallback(cAudioDeviceListEvent::eDefaultInputChanged, [] {
     //{{{
     cout << "\n=== Default input device changed! ===\n\n";
     print_all_devices();
     });
     //}}}
-  set_audio_device_list_callback (audio_device_list_event::default_output_device_changed, [] {
+  setAudioDeviceListCallback(cAudioDeviceListEvent::eDefaultOutputChanged, [] {
     //{{{
     cout << "\n=== Default output device changed! ===\n\n";
     print_all_devices();
     });
     //}}}
 
-  auto device = get_default_audio_output_device();
+  auto device = getDefaultAudioOutputDevice();
   if (!device)
     return 1;
-  device->set_sample_rate (44100);
+  device->setSampleRate (44100);
 
+  //{{{  synth
   auto synth = synthesiser();
-  synth.set_sample_rate (float (device->get_sample_rate()));
-
+  synth.set_sample_rate (float (device->getSampleRate()));
+  //}}}
+  //{{{  noise
   random_device rd;
   minstd_rand gen (rd());
   uniform_real_distribution<float> white_noise (-1.0f, 1.0f);
-
+  //}}}
+  //{{{  sine
   float frequency_hz = 440.0f;
-  float delta = 2.0f * frequency_hz * float(M_PI / device->get_sample_rate());
+  float delta = 2.0f * frequency_hz * float(M_PI / device->getSampleRate());
   float phase = 0;
+  //}}}
 
-  device->connect([=] (audio_device&, audio_device_io<float>& io) mutable noexcept {
-    if (!io.output_buffer.has_value())
+  device->connect([=] (cAudioDevice&, sAudioDeviceIo<float>& io) mutable noexcept {
+    if (!io.outputBuffer.has_value())
       return;
 
-    auto& out = *io.output_buffer;
+    auto& out = *io.outputBuffer;
     // melody
-    for (int frame = 0; frame < out.size_frames(); ++frame) {
+    for (int frame = 0; frame < out.getSizeFrames(); ++frame) {
       auto next_sample = synth.get_next_sample();
-      for (int channel = 0; channel < out.size_channels(); ++channel)
+      for (int channel = 0; channel < out.getSizeChannels(); ++channel)
         out (frame, channel) = next_sample;
       }
     //{{{  sine
