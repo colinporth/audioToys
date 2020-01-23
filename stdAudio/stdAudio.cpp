@@ -14,10 +14,13 @@
 #include <thread>
 #include <random>
 #include "audio.h"
+
+using namespace std;
+using namespace audio;
 //}}}
 
 //{{{
-constexpr std::array<int, 22> notes = {
+constexpr array<int, 22> notes = {
   88, 86, 78, 78, 80, 80,
   85, 83, 74, 74, 76, 76,
   83, 81, 73, 73, 76, 76,
@@ -29,7 +32,7 @@ constexpr float bpm = 260.0;
 //{{{
 float note_to_frequency_hz (int note) {
   constexpr float pitch_standard_hz = 440.0f;
-  return pitch_standard_hz * std::pow (2.0f, float (note - 69) / 12.0f);
+  return pitch_standard_hz * pow (2.0f, float (note - 69) / 12.0f);
   }
 //}}}
 
@@ -51,11 +54,11 @@ bool is_default_device (const audio_device& d) {
 //{{{
 void print_device_info (const audio_device& d) {
 
-  std::cout << "- \"" << d.name() << "\", ";
-  std::cout << "sample rate = " << d.get_sample_rate() << " Hz, ";
-  std::cout << "buffer size = " << d.get_buffer_size_frames() << " frames, ";
-  std::cout << (d.is_input() ? d.get_num_input_channels() : d.get_num_output_channels()) << " channels";
-  std::cout << (is_default_device(d) ? " [DEFAULT DEVICE]\n" : "\n");
+  cout << "- \"" << d.name() << "\", ";
+  cout << "sample rate = " << d.get_sample_rate() << " Hz, ";
+  cout << "buffer size = " << d.get_buffer_size_frames() << " frames, ";
+  cout << (d.is_input() ? d.get_num_input_channels() : d.get_num_output_channels()) << " channels";
+  cout << (is_default_device(d) ? " [DEFAULT DEVICE]\n" : "\n");
   };
 //}}}
 //{{{
@@ -68,15 +71,15 @@ void print_device_list (const audio_device_list& list) {
 //{{{
 void print_all_devices() {
 
-  std::cout << "Input devices:\n==============\n";
+  cout << "Input devices:\n==============\n";
   print_device_list (get_audio_input_device_list());
 
-  std::cout << "\nOutput devices:\n===============\n";
+  cout << "\nOutput devices:\n===============\n";
   print_device_list (get_audio_output_device_list());
   }
 //}}}
 
-std::atomic<bool> stop = false;
+atomic<bool> stop = false;
 //{{{
 struct synthesiser {
   //{{{
@@ -96,8 +99,8 @@ struct synthesiser {
         }
       }
 
-    auto next_sample = std::copysign (0.1f, std::sin(_phase));
-    _phase = std::fmod (_phase + _delta, 2.0f * float(M_PI));
+    auto next_sample = copysign (0.1f, sin(_phase));
+    _phase = fmod (_phase + _delta, 2.0f * float(M_PI));
     return next_sample;
     }
   //}}}
@@ -131,19 +134,19 @@ int main() {
 
   set_audio_device_list_callback (audio_device_list_event::device_list_changed, [] {
     //{{{
-    std::cout << "\n=== Audio device list changed! ===\n\n";
+    cout << "\n=== Audio device list changed! ===\n\n";
     print_all_devices();
     });
     //}}}
   set_audio_device_list_callback (audio_device_list_event::default_input_device_changed, [] {
     //{{{
-    std::cout << "\n=== Default input device changed! ===\n\n";
+    cout << "\n=== Default input device changed! ===\n\n";
     print_all_devices();
     });
     //}}}
   set_audio_device_list_callback (audio_device_list_event::default_output_device_changed, [] {
     //{{{
-    std::cout << "\n=== Default output device changed! ===\n\n";
+    cout << "\n=== Default output device changed! ===\n\n";
     print_all_devices();
     });
     //}}}
@@ -151,15 +154,14 @@ int main() {
   auto device = get_default_audio_output_device();
   if (!device)
     return 1;
-
   device->set_sample_rate (44100);
 
   auto synth = synthesiser();
   synth.set_sample_rate (float (device->get_sample_rate()));
 
-  std::random_device rd;
-  std::minstd_rand gen (rd());
-  std::uniform_real_distribution<float> white_noise (-1.0f, 1.0f);
+  random_device rd;
+  minstd_rand gen (rd());
+  uniform_real_distribution<float> white_noise (-1.0f, 1.0f);
 
   float frequency_hz = 440.0f;
   float delta = 2.0f * frequency_hz * float(M_PI / device->get_sample_rate());
@@ -170,7 +172,7 @@ int main() {
       return;
 
     auto& out = *io.output_buffer;
-    // elody
+    // melody
     for (int frame = 0; frame < out.size_frames(); ++frame) {
       auto next_sample = synth.get_next_sample();
       for (int channel = 0; channel < out.size_channels(); ++channel)
@@ -178,8 +180,8 @@ int main() {
       }
     //{{{  sine
     //for (int frame = 0; frame < out.size_frames(); ++frame) {
-      //float next_sample = std::sin (phase);
-      //phase = std::fmod (phase + delta, 2.0f * static_cast<float>(M_PI));
+      //float next_sample = sin (phase);
+      //phase = fmod (phase + delta, 2.0f * static_cast<float>(M_PI));
       //for (int channel = 0; channel < out.size_channels(); ++channel)
         //out (frame, channel) = 0.2f * next_sample;
       //}
@@ -193,6 +195,6 @@ int main() {
 
   device->start();
   while (!stop.load()) {
-    std::this_thread::sleep_for (std::chrono::milliseconds(50));
+    this_thread::sleep_for (chrono::milliseconds(50));
     }
   }
