@@ -34,15 +34,13 @@
 //}}}
 
 namespace audio {
+  // audioBuffer
   struct sContiguousInterleaved {};
   inline constexpr sContiguousInterleaved contiguousInterleaved;
-
   struct sContiguousDeinterleaved {};
   inline constexpr sContiguousDeinterleaved contiguousDeinterleaved;
-
   struct sPtrToPtrDeinterleaved {};
   inline constexpr sPtrToPtrDeinterleaved ptrToPtrDeinterleaved;
-
   //{{{
   template <typename SampleType> class cAudioBuffer {
   public:
@@ -110,7 +108,7 @@ namespace audio {
   //{{{
   template <typename SampleType> struct sAudioDeviceIo {
 
-    std::optional <cAudioBuffer <SampleType>> inputBuffer;
+    std::optional <cAudioBuffer<SampleType>> inputBuffer;
     std::optional <std::chrono::time_point <std::chrono::steady_clock>> inputTime;
 
     std::optional <cAudioBuffer<SampleType>> outputBuffer;
@@ -118,6 +116,7 @@ namespace audio {
     };
   //}}}
 
+  // cAudioDevice
   //{{{
   class cWaspiUtil {
   public:
@@ -135,6 +134,7 @@ namespace audio {
       return IMMDeviceEnumerator_interface_id;
       }
     //}}}
+
     //{{{
     static const IID& getIAudioClientInterfaceId() {
 
@@ -305,46 +305,28 @@ namespace audio {
     //}}}
 
     std::string_view getName() const noexcept { return mName; }
-
-    using deviceId_t = std::wstring;
-    deviceId_t getDeviceId() const noexcept { return mDeviceId; }
+    std::wstring getDeviceId() const noexcept { return mDeviceId; }
 
     bool isInput() const noexcept { return mIsRenderDevice == false; }
     bool isOutput() const noexcept { return mIsRenderDevice == true; }
 
+    int getNumInputChannels() const noexcept { return isInput() ? mMixFormat.Format.nChannels : 0; }
+    int getNumOutputChannels() const noexcept { return isOutput() ? mMixFormat.Format.nChannels : 0; }
+
+    DWORD getSampleRate() const noexcept { return mMixFormat.Format.nSamplesPerSec; }
     //{{{
-    int getNumInputChannels() const noexcept {
+    bool setSampleRate (DWORD sampleRate) {
 
-      if (isInput() == false)
-        return 0;
-
-      return mMixFormat.Format.nChannels;
-      }
-    //}}}
-    //{{{
-    int getNumOutputChannels() const noexcept {
-
-      if (isOutput() == false)
-        return 0;
-
-      return mMixFormat.Format.nChannels;
-      }
-    //}}}
-
-    using sampleRate_t = DWORD;
-    sampleRate_t getSampleRate() const noexcept { return mMixFormat.Format.nSamplesPerSec; }
-    //{{{
-    bool setSampleRate (sampleRate_t sampleRate) {
       mMixFormat.Format.nSamplesPerSec = sampleRate;
       fixupMixFormat();
+
       return true;
       }
     //}}}
 
-    using buffer_size_t = UINT32;
-    buffer_size_t getBufferSizeFrames() const noexcept { return mBufferFrameCount; }
+    UINT32 getBufferSizeFrames() const noexcept { return mBufferFrameCount; }
     //{{{
-    bool setBufferSizeFrames (buffer_size_t bufferSize) {
+    bool setBufferSizeFrames (UINT32 bufferSize) {
       mBufferFrameCount = bufferSize;
       return true;
       }
@@ -361,18 +343,13 @@ namespace audio {
     //{{{
     template <typename SampleType> bool setSampleType() {
 
-      if (_is_connected() && !is_sampleType<SampleType>())
+      if (isConnected() && !is_sampleType<SampleType>())
         throw sAudioDeviceException ("Cannot change sample type after connecting a callback.");
 
       return setSampleTypeHelper<SampleType>();
       }
     //}}}
-    //{{{
-    template <typename SampleType> bool isSampleType() const {
-
-      return mMixFormat_matchesType<SampleType>();
-      }
-    //}}}
+    template <typename SampleType> bool isSampleType() const { return mixFormatMatchesType<SampleType>(); }
     constexpr bool canConnect() const noexcept { return true; }
     constexpr bool canProcess() const noexcept { return true; }
 
@@ -541,8 +518,8 @@ namespace audio {
   private:
     friend class cAudioDeviceEnumerator;
     //{{{
-    cAudioDevice (IMMDevice* device, bool isRenderDevice) :
-        mDevice(device), mIsRenderDevice(isRenderDevice) {
+    cAudioDevice (IMMDevice* device, bool isRenderDevice)
+        : mDevice(device), mIsRenderDevice(isRenderDevice) {
 
       // TODO: Handle errors better.  Maybe by throwing exceptions?
       if (mDevice == nullptr)
@@ -623,6 +600,7 @@ namespace audio {
     //}}}
     //{{{
     void fixupMixFormat() {
+
       mMixFormat.Format.nBlockAlign = mMixFormat.Format.nChannels * mMixFormat.Format.wBitsPerSample / 8;
       mMixFormat.Format.nAvgBytesPerSec = mMixFormat.Format.nSamplesPerSec * mMixFormat.Format.wBitsPerSample * mMixFormat.Format.nChannels / 8;
       }
@@ -764,11 +742,12 @@ namespace audio {
     };
   //}}}
 
+  // cAudioDeviceList
   enum class cAudioDeviceListEvent { eListChanged, eDefaultInputChanged, eDefaultOutputChanged, };
   template <typename F, typename = std::enable_if_t<std::is_invocable_v<F>>> void setAudioDeviceListCallback (cAudioDeviceListEvent, F&&);
-
   class cAudioDeviceList : public std::forward_list <cAudioDevice> {};
 
+  // cAudioDeviceMonitor
   //{{{
   class cAudioDeviceMonitor {
   public:
@@ -926,7 +905,13 @@ namespace audio {
     std::array <std::unique_ptr <WASAPINotificationClient>, 3> mCallbackMonitors;
     };
   //}}}
+  //{{{
+  template <typename F, typename /* = enable_if_t<is_invocable_v<F>> */> void setAudioDeviceListCallback (cAudioDeviceListEvent event, F&& callback) {
+    cAudioDeviceMonitor::instance().registerCallback (event, std::move (callback));
+    }
+  //}}}
 
+  // cAudioDeviceEnumerator
   //{{{
   class cAudioDeviceEnumerator {
   public:
@@ -1041,10 +1026,4 @@ namespace audio {
   cAudioDeviceList getAudioOutputDeviceList() { return cAudioDeviceEnumerator::getOutputDeviceList(); }
   std::optional<cAudioDevice> getDefaultAudioInputDevice() { return cAudioDeviceEnumerator::getDefaultInputDevice(); }
   std::optional<cAudioDevice> getDefaultAudioOutputDevice() { return cAudioDeviceEnumerator::getDefaultOutputDevice(); }
-
-  //{{{
-  template <typename F, typename /* = enable_if_t<is_invocable_v<F>> */> void setAudioDeviceListCallback (cAudioDeviceListEvent event, F&& callback) {
-    cAudioDeviceMonitor::instance().registerCallback (event, std::move (callback));
-    }
-  //}}}
   }

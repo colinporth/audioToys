@@ -30,9 +30,9 @@ constexpr array<int, 22> notes = {
 
 constexpr float bpm = 260.0;
 //{{{
-float note_to_frequency_hz (int note) {
-  constexpr float pitch_standard_hz = 440.0f;
-  return pitch_standard_hz * pow (2.0f, float (note - 69) / 12.0f);
+float noteToFrequencyHz (int note) {
+  constexpr float pitchStandardHz = 440.0f;
+  return pitchStandardHz * pow (2.0f, float (note - 69) / 12.0f);
   }
 //}}}
 
@@ -70,7 +70,9 @@ void printDeviceList (const cAudioDeviceList& deviceList) {
   }
 //}}}
 //{{{
-void printAllDevices() {
+void printDevices (const string title) {
+
+  cout << title;
 
   cout << "Input devices\n";
   printDeviceList (getAudioInputDeviceList());
@@ -84,31 +86,31 @@ atomic<bool> stop = false;
 //{{{
 struct synthesiser {
   //{{{
-  float get_next_sample() {
+  float getNextSample() {
 
-    assert (_sample_rate > 0);
+    assert (mSampleRate > 0);
 
-    _ms_counter += 1000.0f / _sample_rate;
-    if (_ms_counter >= _note_duration_ms) {
-      _ms_counter = 0;
-      if (++_current_note_index < notes.size()) {
+    mMsCounter += 1000.0f / mSampleRate;
+    if (mMsCounter >= mNoteDurationMs) {
+      mMsCounter = 0;
+      if (++mCurrentNoteIndex < notes.size()) {
         update();
         }
       else {
-        stop.store(true);
+        stop.store (true);
         return 0;
         }
       }
 
-    auto next_sample = copysign (0.1f, sin(_phase));
-    _phase = fmod (_phase + _delta, 2.0f * float(M_PI));
-    return next_sample;
+    auto nextSample = copysign (0.1f, sin (mPhase));
+    mPhase = fmod (mPhase + mDelta, 2.0f * float(M_PI));
+    return nextSample;
     }
   //}}}
   //{{{
-  void set_sample_rate (float sample_rate) {
+  void setSampleRate (int sampleRate) {
 
-    _sample_rate = sample_rate;
+    mSampleRate = (float)sampleRate;
     update();
     }
   //}}}
@@ -116,41 +118,25 @@ struct synthesiser {
 private:
   //{{{
   void update() noexcept {
-    float frequency_hz = note_to_frequency_hz(notes.at(_current_note_index));
-    _delta = 2.0f * frequency_hz * static_cast<float>(M_PI / _sample_rate);
+    float frequencyHz = noteToFrequencyHz (notes.at (mCurrentNoteIndex));
+    mDelta = 2.0f * frequencyHz * static_cast<float>(M_PI / mSampleRate);
     }
   //}}}
 
-  float _sample_rate = 0;
-  float _delta = 0;
-  float _phase = 0;
-  float _ms_counter = 0;
-  float _note_duration_ms = 60'000.0f / bpm;
-  int _current_note_index = 0;
+  float mSampleRate = 0;
+  float mDelta = 0;
+  float mPhase = 0;
+  float mMsCounter = 0;
+  float mNoteDurationMs = 60'000.0f / bpm;
+  int mCurrentNoteIndex = 0;
   };
 //}}}
 
 int main() {
-  printAllDevices();
-
-  setAudioDeviceListCallback(cAudioDeviceListEvent::eListChanged, [] {
-    //{{{
-    cout << "\n=== Audio device list changed! ===\n\n";
-    printAllDevices();
-    });
-    //}}}
-  setAudioDeviceListCallback(cAudioDeviceListEvent::eDefaultInputChanged, [] {
-    //{{{
-    cout << "\n=== Default input device changed! ===\n\n";
-    printAllDevices();
-    });
-    //}}}
-  setAudioDeviceListCallback(cAudioDeviceListEvent::eDefaultOutputChanged, [] {
-    //{{{
-    cout << "\n=== Default output device changed! ===\n\n";
-    printAllDevices();
-    });
-    //}}}
+  printDevices ("");
+  setAudioDeviceListCallback (cAudioDeviceListEvent::eListChanged, [] { printDevices ("deviceList changed\n"); });
+  setAudioDeviceListCallback (cAudioDeviceListEvent::eDefaultInputChanged, [] { printDevices ("Def input changed\n"); });
+  setAudioDeviceListCallback (cAudioDeviceListEvent::eDefaultOutputChanged, [] { printDevices ("Def output changed\n"); });
 
   auto device = getDefaultAudioOutputDevice();
   if (!device)
@@ -159,7 +145,7 @@ int main() {
 
   //{{{  synth
   auto synth = synthesiser();
-  synth.set_sample_rate (float (device->getSampleRate()));
+  synth.setSampleRate (device->getSampleRate());
   //}}}
   //{{{  noise
   random_device rd;
@@ -179,7 +165,7 @@ int main() {
     auto& out = *io.outputBuffer;
     // melody
     for (int frame = 0; frame < out.getSizeFrames(); ++frame) {
-      auto next_sample = synth.get_next_sample();
+      auto next_sample = synth.getNextSample();
       for (int channel = 0; channel < out.getSizeChannels(); ++channel)
         out (frame, channel) = next_sample;
       }
@@ -200,6 +186,6 @@ int main() {
 
   device->start();
   while (!stop.load()) {
-    this_thread::sleep_for (chrono::milliseconds(50));
+    this_thread::sleep_for (chrono::milliseconds (50));
     }
   }
