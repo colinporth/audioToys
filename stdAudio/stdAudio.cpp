@@ -135,7 +135,7 @@ private:
 //}}}
 
 int main() {
-  cLog::init (LOGINFO, false, "",  "stdAudio");
+  cLog::init (LOGINFO, false, "", "stdAudio");
 
   printDevices ("");
   setAudioDeviceListCallback (cAudioDeviceListEvent::eListChanged, [] { printDevices ("deviceList changed"); });
@@ -162,13 +162,14 @@ int main() {
   float phase = 0;
   //}}}
 
-  device->connect ([=] (cAudioDevice&, sAudioDeviceIo& io) mutable noexcept {
+  device->connect ([=] (cAudioDevice& device, sAudioDeviceIo& io) mutable noexcept {
     auto& out = io.outputBuffer;
     // melody
     for (int frame = 0; frame < out.getSizeFrames(); ++frame) {
       auto next_sample = synth.getNextSample();
       for (int channel = 0; channel < out.getSizeChannels(); ++channel)
         out (frame, channel) = next_sample;
+      //cLog::log (LOGINFO, " connect %d %d", device.getSampleRate(), device.getBufferSizeFrames());
       }
     //{{{  sine
     //for (int frame = 0; frame < out.size_frames(); ++frame) {
