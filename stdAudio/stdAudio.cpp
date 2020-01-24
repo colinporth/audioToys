@@ -5,15 +5,17 @@
 // (See accompanying file LICENSE.md or copy at http://boost.org/LICENSE_1_0.txt)
 //}}}
 //{{{  includes
-#ifdef _WIN32
-  #define _USE_MATH_DEFINES
-#endif
+#define _CRT_SECURE_NO_WARNINGS
+#define _USE_MATH_DEFINES
 
 #include <cmath>
 #include <array>
 #include <thread>
 #include <random>
 #include "audio.h"
+
+#include "../../shared/utils/utils.h"
+#include "../../shared/utils/cLog.h"
 
 using namespace std;
 using namespace audio;
@@ -55,11 +57,11 @@ bool isDefaultDevice (const cAudioDevice& device) {
 //{{{
 void printDeviceInfo (const cAudioDevice& device) {
 
-  cout << device.getName();
-  cout << " sampleRate = " << device.getSampleRate() << "Hz";
-  cout << " bufferSize = " << device.getBufferSizeFrames() << " frames ";
-  cout << (device.isInput() ? device.getNumInputChannels() : device.getNumOutputChannels()) << " chans";
-  cout << (isDefaultDevice (device) ? " default\n" : "\n");
+  cLog::log (LOGINFO, device.getName());
+  cLog::log (LOGINFO, "-  sampleRate = " + dec(device.getSampleRate()) +  "Hz" +
+                      " bufferSize = " + dec(device.getBufferSizeFrames()) + " frames " +
+                      (device.isInput() ? dec(device.getNumInputChannels()) : dec(device.getNumOutputChannels())) + " chans" +
+                      (isDefaultDevice (device) ? " default" : ""));
   };
 //}}}
 //{{{
@@ -72,12 +74,12 @@ void printDeviceList (const cAudioDeviceList& deviceList) {
 //{{{
 void printDevices (const string title) {
 
-  cout << title;
+  cLog::log (LOGINFO, title);
 
-  cout << "Input devices\n";
+  cLog::log (LOGINFO, "Input devices");
   printDeviceList (getAudioInputDeviceList());
 
-  cout << "\nOutput devices\n";
+  cLog::log (LOGINFO, "Output devices");
   printDeviceList (getAudioOutputDeviceList());
   }
 //}}}
@@ -133,10 +135,12 @@ private:
 //}}}
 
 int main() {
+  cLog::init (LOGINFO, false, "",  "stdAudio");
+
   printDevices ("");
-  setAudioDeviceListCallback (cAudioDeviceListEvent::eListChanged, [] { printDevices ("deviceList changed\n"); });
-  setAudioDeviceListCallback (cAudioDeviceListEvent::eDefaultInputChanged, [] { printDevices ("Def input changed\n"); });
-  setAudioDeviceListCallback (cAudioDeviceListEvent::eDefaultOutputChanged, [] { printDevices ("Def output changed\n"); });
+  setAudioDeviceListCallback (cAudioDeviceListEvent::eListChanged, [] { printDevices ("deviceList changed"); });
+  setAudioDeviceListCallback (cAudioDeviceListEvent::eDefaultInputChanged, [] { printDevices ("Def input changed"); });
+  setAudioDeviceListCallback (cAudioDeviceListEvent::eDefaultOutputChanged, [] { printDevices ("Def output changed"); });
 
   auto device = getDefaultAudioOutputDevice();
   if (!device)
@@ -158,11 +162,8 @@ int main() {
   float phase = 0;
   //}}}
 
-  device->connect([=] (cAudioDevice&, sAudioDeviceIo<float>& io) mutable noexcept {
-    if (!io.outputBuffer.has_value())
-      return;
-
-    auto& out = *io.outputBuffer;
+  device->connect ([=] (cAudioDevice&, sAudioDeviceIo& io) mutable noexcept {
+    auto& out = io.outputBuffer;
     // melody
     for (int frame = 0; frame < out.getSizeFrames(); ++frame) {
       auto next_sample = synth.getNextSample();

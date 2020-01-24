@@ -1,4 +1,9 @@
-// libstdaudio - simple non templated cotiguous interleaved float samples
+// libstdaudio
+//{{{
+// Copyright (c) 2018 - Timur Doumler
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE.md or copy at http://boost.org/LICENSE_1_0.txt)
+//}}}
 #pragma once
 //{{{  includes
 #define NOMINMAX
@@ -30,42 +35,84 @@
 
 namespace audio {
   // audioBuffer
+  struct sContiguousInterleaved {};
+  inline constexpr sContiguousInterleaved contiguousInterleaved;
+  struct sContiguousDeinterleaved {};
+  inline constexpr sContiguousDeinterleaved contiguousDeinterleaved;
+  struct sPtrToPtrDeinterleaved {};
+  inline constexpr sPtrToPtrDeinterleaved ptrToPtrDeinterleaved;
   //{{{
-  class cAudioBuffer {
+  template <typename SampleType> class cAudioBuffer {
   public:
-    cAudioBuffer() {}
-    cAudioBuffer (float* data, size_t numFrames, size_t numChannels)
-        : mNumFrames(numFrames), mNumChannels(numChannels), mStride(mNumChannels) {
+    //{{{
+    cAudioBuffer (SampleType* data, size_t numFrames, size_t numChannels, sContiguousInterleaved)
+        : mNumFrames(numFrames), mNumChannels(numChannels), mStride(mNumChannels), mIsContiguous(true) {
+
       assert (numChannels <= mMaxNumChannels);
       for (auto i = 0; i < mNumChannels; ++i)
         mChannels[i] = data + i;
       }
+    //}}}
+    //{{{
+    cAudioBuffer (SampleType* data, size_t numFrames, size_t numChannels, sContiguousDeinterleaved)
+        : mNumFrames(numFrames), mNumChannels(numChannels), mStride(1), mIsContiguous(true) {
+
+      assert (numChannels <= mMaxNumChannels);
+      for (auto i = 0; i < mNumChannels; ++i)
+        mChannels[i] = data + (i * mNumFrames);
+      }
+    //}}}
+    //{{{
+    cAudioBuffer (SampleType** data, size_t numFrames, size_t numChannels, sPtrToPtrDeinterleaved)
+        : mNumFrames(numFrames), mNumChannels(numChannels), mStride(1), mIsContiguous(false) {
+
+      assert (numChannels <= mMaxNumChannels);
+      copy (data, data + mNumChannels, mChannels.begin());
+      }
+    //}}}
+
+    SampleType* data() const noexcept { return mIsContiguous ? mChannels[0] : nullptr; }
+
+    bool isContiguous() const noexcept { return mIsContiguous; }
+    bool areFramesContiguous() const noexcept { return mStride == mNumChannels; }
+    bool areChannelsContiguous() const noexcept { return mStride == 1; }
 
     size_t getSizeFrames() const noexcept { return mNumFrames; }
     size_t getSizeChannels() const noexcept { return mNumChannels; }
     size_t getSizeSamples() const noexcept { return mNumChannels * mNumFrames; }
 
-    float& operator() (size_t frame, size_t channel) noexcept {
-      return const_cast<float&>(std::as_const(*this).operator()(frame, channel));
-      }
+    //{{{
+    SampleType& operator() (size_t frame, size_t channel) noexcept {
 
-    const float& operator() (size_t frame, size_t channel) const noexcept {
+      return const_cast<SampleType&>(std::as_const(*this).operator()(frame, channel));
+      }
+    //}}}
+    //{{{
+    const SampleType& operator() (size_t frame, size_t channel) const noexcept {
+
       return mChannels[channel][frame * mStride];
       }
+    //}}}
 
   private:
+    bool mIsContiguous = false;
+
     size_t mNumFrames = 0;
     size_t mNumChannels = 0;
     size_t mStride = 0;
 
     constexpr static size_t mMaxNumChannels = 16;
-    std::array <float*, mMaxNumChannels> mChannels = {};
+    std::array<SampleType*, mMaxNumChannels> mChannels = {};
     };
   //}}}
   //{{{
-  struct sAudioDeviceIo {
-    cAudioBuffer inputBuffer;
-    cAudioBuffer outputBuffer;
+  template <typename SampleType> struct sAudioDeviceIo {
+
+    std::optional <cAudioBuffer<SampleType>> inputBuffer;
+    std::optional <std::chrono::time_point <std::chrono::steady_clock>> inputTime;
+
+    std::optional <cAudioBuffer<SampleType>> outputBuffer;
+    std::optional <std::chrono::time_point <std::chrono::steady_clock>> outputTime;
     };
   //}}}
 
@@ -188,27 +235,27 @@ namespace audio {
 
     //{{{
     cAudioDevice (cAudioDevice&& other) :
-        mDevice(other.mDevice),
-        mAudioClient(other.mAudioClient),
-        mAudioCaptureClient(other.mAudioCaptureClient),
-        mAudioRenderClient(other.mAudioRenderClient),
-        mEventHandle(other.mEventHandle),
-        mDeviceId(std::move(other.mDeviceId)),
-        mRunning(other.mRunning.load()),
-        mName(std::move(other.mName)),
-        mMixFormat(other.mMixFormat),
-        mProcessingThread(std::move(other.mProcessingThread)),
-        mBufferFrameCount(other.mBufferFrameCount),
-        mIsRenderDevice(other.mIsRenderDevice),
-        mStopCallback(std::move(other.mStopCallback)),
-        mUserCallback(std::move(other.mUserCallback)) {
-
+      mDevice(other.mDevice),
+      mAudioClient(other.mAudioClient),
+      mAudioCaptureClient(other.mAudioCaptureClient),
+      mAudioRenderClient(other.mAudioRenderClient),
+      mEventHandle(other.mEventHandle),
+      mDeviceId(std::move(other.mDeviceId)),
+      mRunning(other.mRunning.load()),
+      mName(std::move(other.mName)),
+      mMixFormat(other.mMixFormat),
+      mProcessingThread(std::move(other.mProcessingThread)),
+      mBufferFrameCount(other.mBufferFrameCount),
+      mIsRenderDevice(other.mIsRenderDevice),
+      mStopCallback(std::move(other.mStopCallback)),
+      mUserCallback(std::move(other.mUserCallback))
+    {
       other.mDevice = nullptr;
       other.mAudioClient = nullptr;
       other.mAudioCaptureClient = nullptr;
       other.mAudioRenderClient = nullptr;
       other.mEventHandle = nullptr;
-      }
+    }
     //}}}
     //{{{
     cAudioDevice& operator= (cAudioDevice&& other) noexcept {
@@ -257,7 +304,7 @@ namespace audio {
       }
     //}}}
 
-    std::string getName() const noexcept { return mName; }
+    std::string_view getName() const noexcept { return mName; }
     std::wstring getDeviceId() const noexcept { return mDeviceId; }
 
     bool isInput() const noexcept { return mIsRenderDevice == false; }
@@ -285,45 +332,65 @@ namespace audio {
       }
     //}}}
 
-    bool isRunning() const noexcept { return mRunning; }
     //{{{
-    bool hasUnprocessedIo() const noexcept {
+    template <typename SampleType> constexpr bool supportsSampleType() const noexcept {
 
-      if (mAudioClient == nullptr)
-        return false;
-
-      if (!mRunning)
-        return false;
-
-      UINT32 current_padding = 0;
-      mAudioClient->GetCurrentPadding (&current_padding);
-
-      auto num_frames_available = mBufferFrameCount - current_padding;
-      return num_frames_available > 0;
-      }
-    //}}}
-    void wait() const { WaitForSingleObject (mEventHandle, INFINITE); }
-
-    //{{{
-    void process (const std::function<void (cAudioDevice&, sAudioDeviceIo&)>& callback) {
-
-      if (!mixFormatMatchesType())
-        throw sAudioDeviceException ("Attempting to process a callback for a sample type that does not match the configured sample type.");
-
-      processHelper (callback);
+      return is_same_v<SampleType, float> ||
+             is_same_v<SampleType, int32_t> ||
+             is_same_v<SampleType, int16_t>;
       }
     //}}}
     //{{{
-    void connect (std::function<void (cAudioDevice&, sAudioDeviceIo&)> callback) {
+    template <typename SampleType> bool setSampleType() {
 
-      setSampleTypeHelper();
-      connectHelper (std::function<void (cAudioDevice&, sAudioDeviceIo&)> { callback } );
+      if (isConnected() && !is_sampleType<SampleType>())
+        throw sAudioDeviceException ("Cannot change sample type after connecting a callback.");
+
+      return setSampleTypeHelper<SampleType>();
+      }
+    //}}}
+    template <typename SampleType> bool isSampleType() const { return mixFormatMatchesType<SampleType>(); }
+    constexpr bool canConnect() const noexcept { return true; }
+    constexpr bool canProcess() const noexcept { return true; }
+
+    //{{{  template float void connect (CallbackType callback)
+    template <typename CallbackType,
+              std::enable_if_t <std::is_nothrow_invocable_v <CallbackType, cAudioDevice&, sAudioDeviceIo<float>&>, int> = 0>
+    void connect (CallbackType callback) {
+
+      setSampleTypeHelper<float>();
+      connectHelper (wasapi_float_callback_t { callback } );
+      }
+    //}}}
+    //{{{  template int32_t void connect (CallbackType callback
+    template <typename CallbackType,
+              std::enable_if_t <std::is_nothrow_invocable_v <CallbackType, cAudioDevice&, sAudioDeviceIo<int32_t>&>, int> = 0>
+    void connect (CallbackType callback) {
+
+      setSampleTypeHelper<int32_t>();
+      connectHelper (wasapi_int32_callback_t { callback } );
+      }
+    //}}}
+    //{{{  template int16_t void connect (CallbackType callback
+    template <typename CallbackType,
+              std::enable_if_t <std::is_nothrow_invocable_v <CallbackType, cAudioDevice&, sAudioDeviceIo<int16_t>&>, int> = 0>
+    void connect (CallbackType callback) {
+
+      setSampleTypeHelper<int16_t>();
+      connectHelper (wasapi_int16_callback_t { callback } );
       }
     //}}}
 
-    //{{{
-    bool start (std::function<void (cAudioDevice&)>&& startCallback = [](cAudioDevice&) noexcept {},
-                std::function<void (cAudioDevice&)>&& stopCallback = [](cAudioDevice&) noexcept {}) {
+    // TODO: remove std::function as soon as C++20 default-ctable lambda and lambda in unevaluated contexts become available
+    using no_op_t = std::function<void (cAudioDevice&)>;
+    //{{{  template bool start (
+    // TODO: is_nothrow_invocable_t does not compile, temporarily replaced with is_invocable_t
+    template <typename StartCallbackType = no_op_t,
+              typename StopCallbackType = no_op_t,
+              typename = std::enable_if_t <std::is_invocable_v <StartCallbackType, cAudioDevice&> &&
+                                           std::is_invocable_v <StopCallbackType, cAudioDevice&>> >
+    bool start (StartCallbackType&& start_callback = [](cAudioDevice&) noexcept {},
+                StopCallbackType&& stop_callback = [](cAudioDevice&) noexcept {}) {
 
       if (mAudioClient == nullptr)
         return false;
@@ -360,21 +427,19 @@ namespace audio {
           return false;
 
         mRunning = true;
-        mProcessingThread = std::thread {
-          [this]() {
+
+        if (!mUserCallback.valueless_by_exception()) {
+          mProcessingThread = std::thread { [this]() {
             SetThreadPriority (GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
             while (mRunning) {
-              visit ([this](auto&& callback) {
-                if (callback)
-                  process (callback);
-                }, mUserCallback);
+              visit ([this](auto&& callback) { if (callback) process(callback); }, mUserCallback);
               wait();
               }
-            }
-          };
+            } };
+          }
 
-        startCallback (*this);
-        mStopCallback = stopCallback;
+        start_callback (*this);
+        mStopCallback = stop_callback;
         }
 
       return true;
@@ -397,6 +462,56 @@ namespace audio {
         }
 
       return true;
+      }
+    //}}}
+
+    bool isRunning() const noexcept { return mRunning; }
+    void wait() const { WaitForSingleObject (mEventHandle, INFINITE); }
+
+    //{{{  template void float process (const CallbackType& callback
+    template <typename CallbackType,
+              std::enable_if_t <std::is_invocable_v<CallbackType, cAudioDevice&, sAudioDeviceIo<float>&>, int> = 0>
+    void process (const CallbackType& callback) {
+      if (!mixFormatMatchesType<float>())
+        throw sAudioDeviceException ("Attempting to process a callback for a sample type that does not match the configured sample type.");
+
+      processHelper<float>(callback);
+      }
+    //}}}
+    //{{{  template void int32 process (const CallbackType& callback
+    template <typename CallbackType,
+              std::enable_if_t<std::is_invocable_v<CallbackType, cAudioDevice&, sAudioDeviceIo<int32_t>&>, int> = 0>
+    void process (const CallbackType& callback) {
+      if (!mixFormatMatchesType<int32_t>())
+        throw sAudioDeviceException ("Attempting to process a callback for a sample type that does not match the configured sample type.");
+
+      processHelper<int32_t>(callback);
+      }
+    //}}}
+    //{{{  template void int16_t process (const CallbackType& callback
+    template <typename CallbackType,
+             std::enable_if_t<std::is_invocable_v<CallbackType, cAudioDevice&, sAudioDeviceIo<int16_t>&>, int> = 0>
+    void process (const CallbackType& callback) {
+      if (!mixFormatMatchesType<int16_t>())
+        throw sAudioDeviceException ("Attempting to process a callback for a sample type that does not match the configured sample type.");
+
+      processHelper<int16_t>(callback);
+      }
+    //}}}
+    //{{{
+    bool hasUnprocessedIo() const noexcept {
+
+      if (mAudioClient == nullptr)
+        return false;
+
+      if (!mRunning)
+        return false;
+
+      UINT32 current_padding = 0;
+      mAudioClient->GetCurrentPadding (&current_padding);
+
+      auto num_frames_available = mBufferFrameCount - current_padding;
+      return num_frames_available > 0;
       }
     //}}}
 
@@ -493,18 +608,39 @@ namespace audio {
 
     //{{{
     bool isConnected() const noexcept {
+
+      if (mUserCallback.valueless_by_exception())
+        return false;
+
       return visit([](auto&& callback) { return static_cast<bool>(callback); }, mUserCallback);
       }
     //}}}
 
-    bool mixFormatMatchesType() const noexcept { return mMixFormat.SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT; }
     //{{{
-    void processHelper (const std::function<void (cAudioDevice&, sAudioDeviceIo&)>& callback) {
+    template <typename SampleType> bool mixFormatMatchesType() const noexcept {
+
+      if constexpr (std::is_same_v<SampleType, float>)
+        return mMixFormat.SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+
+      else if constexpr (std::is_same_v<SampleType, int32_t>)
+        return (mMixFormat.SubFormat == KSDATAFORMAT_SUBTYPE_PCM) &&
+               (mMixFormat.Format.wBitsPerSample == sizeof(int32_t) * 8);
+
+      else if constexpr (std::is_same_v<SampleType, int16_t>)
+        return (mMixFormat.SubFormat == KSDATAFORMAT_SUBTYPE_PCM) &&
+               (mMixFormat.Format.wBitsPerSample == sizeof(int16_t) * 8);
+
+      else
+        return false;
+      }
+    //}}}
+    //{{{
+    template <typename SampleType, typename CallbackType> void processHelper (const CallbackType& callback) {
 
       if (mAudioClient == nullptr)
         return;
 
-      if (!mixFormatMatchesType())
+      if (!mixFormatMatchesType <SampleType>())
         return;
 
       if (isOutput()) {
@@ -520,8 +656,8 @@ namespace audio {
         if (data == nullptr)
           return;
 
-        sAudioDeviceIo deviceIo;
-        deviceIo.outputBuffer = { reinterpret_cast<float*>(data), numFramesAvailable, mMixFormat.Format.nChannels };
+        sAudioDeviceIo<SampleType> deviceIo;
+        deviceIo.outputBuffer = { reinterpret_cast<SampleType*>(data), numFramesAvailable, mMixFormat.Format.nChannels, contiguousInterleaved };
         callback (*this, deviceIo);
 
         mAudioRenderClient->ReleaseBuffer (numFramesAvailable, 0);
@@ -540,8 +676,8 @@ namespace audio {
         if (data == nullptr)
           return;
 
-        sAudioDeviceIo deviceIo;
-        deviceIo.inputBuffer = { reinterpret_cast<float*>(data), nextPacketSize, mMixFormat.Format.nChannels };
+        sAudioDeviceIo<SampleType> deviceIo;
+        deviceIo.inputBuffer = { reinterpret_cast<SampleType*>(data), nextPacketSize, mMixFormat.Format.nChannels, contiguousInterleaved };
         callback (*this, deviceIo);
 
         mAudioCaptureClient->ReleaseBuffer (nextPacketSize);
@@ -549,9 +685,21 @@ namespace audio {
       }
     //}}}
     //{{{
-    bool setSampleTypeHelper() {
-      mMixFormat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-      mMixFormat.Format.wBitsPerSample = sizeof(float) * 8;
+    template <typename SampleType> bool setSampleTypeHelper() {
+
+      if constexpr (std::is_same_v<SampleType, float>)
+        mMixFormat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+
+      else if constexpr (std::is_same_v<SampleType, int32_t>)
+        mMixFormat.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+
+      else if constexpr (std::is_same_v<SampleType, int16_t>)
+        mMixFormat.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+
+      else
+        return false;
+
+      mMixFormat.Format.wBitsPerSample = sizeof(SampleType) * 8;
       mMixFormat.Samples.wValidBitsPerSample = mMixFormat.Format.wBitsPerSample;
       fixupMixFormat();
 
@@ -559,7 +707,7 @@ namespace audio {
       }
     //}}}
     //{{{
-    void connectHelper (std::function<void (cAudioDevice&, sAudioDeviceIo&)> callback) {
+    template <typename CallbackType> void connectHelper (CallbackType callback) {
 
       if (mRunning)
         throw sAudioDeviceException ("Cannot connect to running audio_device.");
@@ -584,7 +732,11 @@ namespace audio {
     bool mIsRenderDevice = true;
 
     std::function <void (cAudioDevice&)> mStopCallback;
-    std::variant <std::function<void (cAudioDevice&, sAudioDeviceIo&)>> mUserCallback;
+
+    using wasapi_float_callback_t = std::function <void (cAudioDevice&, sAudioDeviceIo<float>&) >;
+    using wasapi_int32_callback_t = std::function <void (cAudioDevice&, sAudioDeviceIo<int32_t>&) >;
+    using wasapi_int16_callback_t = std::function <void (cAudioDevice&, sAudioDeviceIo<int16_t>&) >;
+    std::variant <wasapi_float_callback_t, wasapi_int32_callback_t, wasapi_int16_callback_t> mUserCallback;
 
     cWaspiUtil::cComInitializer mComInitializer;
     };
@@ -592,6 +744,7 @@ namespace audio {
 
   // cAudioDeviceList
   enum class cAudioDeviceListEvent { eListChanged, eDefaultInputChanged, eDefaultOutputChanged, };
+  template <typename F, typename = std::enable_if_t<std::is_invocable_v<F>>> void setAudioDeviceListCallback (cAudioDeviceListEvent, F&&);
   class cAudioDeviceList : public std::forward_list <cAudioDevice> {};
 
   // cAudioDeviceMonitor
@@ -753,7 +906,7 @@ namespace audio {
     };
   //}}}
   //{{{
-  void setAudioDeviceListCallback (cAudioDeviceListEvent event, std::function<void()>&& callback) {
+  template <typename F, typename /* = enable_if_t<is_invocable_v<F>> */> void setAudioDeviceListCallback (cAudioDeviceListEvent event, F&& callback) {
     cAudioDeviceMonitor::instance().registerCallback (event, std::move (callback));
     }
   //}}}
