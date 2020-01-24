@@ -1,4 +1,4 @@
-// libstdaudio - simple non templated cotiguous interleaved float samples
+// libstdaudio - simple non templated contiguous interleaved float samples
 #pragma once
 //{{{  includes
 #define NOMINMAX
@@ -58,7 +58,7 @@ namespace audio {
     size_t mNumChannels = 0;
     size_t mStride = 0;
 
-    constexpr static size_t mMaxNumChannels = 16;
+    constexpr static size_t mMaxNumChannels = 6;
     std::array <float*, mMaxNumChannels> mChannels = {};
     };
   //}}}
@@ -533,7 +533,6 @@ namespace audio {
         if (nextPacketSize == 0)
           return;
 
-        // TODO: Support device position.
         DWORD flags = 0;
         BYTE* data = nullptr;
         mAudioCaptureClient->GetBuffer (&data, &nextPacketSize, &flags, nullptr, nullptr);
@@ -574,14 +573,15 @@ namespace audio {
     IAudioRenderClient* mAudioRenderClient = nullptr;
     HANDLE mEventHandle;
 
-    std::wstring mDeviceId;
-    std::atomic<bool> mRunning = false;
     std::string mName;
+    std::wstring mDeviceId;
 
-    WAVEFORMATEXTENSIBLE mMixFormat;
-    std::thread mProcessingThread;
-    UINT32 mBufferFrameCount = 0;
     bool mIsRenderDevice = true;
+    WAVEFORMATEXTENSIBLE mMixFormat;
+    UINT32 mBufferFrameCount = 0;
+
+    std::atomic<bool> mRunning = false;
+    std::thread mProcessingThread;
 
     std::function <void (cAudioDevice&)> mStopCallback;
     std::variant <std::function<void (cAudioDevice&, sAudioDeviceIo&)>> mUserCallback;

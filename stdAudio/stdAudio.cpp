@@ -72,7 +72,7 @@ void printDeviceList (const cAudioDeviceList& deviceList) {
   }
 //}}}
 //{{{
-void printDevices (const string title) {
+void printDevices (const string& title) {
 
   cLog::log (LOGINFO, title);
 
@@ -169,7 +169,7 @@ int main() {
       auto next_sample = synth.getNextSample();
       for (int channel = 0; channel < out.getSizeChannels(); ++channel)
         out (frame, channel) = next_sample;
-      //cLog::log (LOGINFO, " connect %d %d", device.getSampleRate(), device.getBufferSizeFrames());
+      cLog::log (LOGINFO, " connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), out.getSizeFrames());
       }
     //{{{  sine
     //for (int frame = 0; frame < out.size_frames(); ++frame) {
