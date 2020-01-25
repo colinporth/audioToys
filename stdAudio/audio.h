@@ -34,6 +34,7 @@ namespace audio {
   class cAudioBuffer {
   public:
     cAudioBuffer() {}
+
     cAudioBuffer (float* data, size_t numFrames, size_t numChannels)
         : mNumFrames(numFrames), mNumChannels(numChannels), mStride(mNumChannels) {
       assert (numChannels <= mMaxNumChannels);
@@ -230,7 +231,7 @@ namespace audio {
       other.mAudioCaptureClient = nullptr;
       other.mAudioRenderClient = nullptr;
       other.mEventHandle = nullptr;
-    }
+      }
     //}}}
     //{{{
     ~cAudioDevice() {
@@ -403,7 +404,7 @@ namespace audio {
           [this]() {
             SetThreadPriority (GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
             while (mRunning) {
-              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback); wait(); 
+              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback); wait();
               }
             }
           };

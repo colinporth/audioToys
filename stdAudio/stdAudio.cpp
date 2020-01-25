@@ -163,11 +163,12 @@ int main() {
   //}}}
 
   device->connect ([=] (cAudioDevice& device, cAudioBuffer& buffer) mutable noexcept {
+    cLog::log (LOGINFO, " connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), buffer.getSizeFrames());
+
     for (int frame = 0; frame < buffer.getSizeFrames(); ++frame) {
       auto nextSample = synth.getNextSample();
       for (int channel = 0; channel < buffer.getSizeChannels(); ++channel)
         buffer (frame, channel) = nextSample;
-      //cLog::log (LOGINFO, " connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), out.getSizeFrames());
       }
     //{{{  sine
     //for (int frame = 0; frame < out.size_frames(); ++frame) {
