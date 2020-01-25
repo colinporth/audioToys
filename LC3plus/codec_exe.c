@@ -47,12 +47,13 @@ typedef struct {
 /* needed by cleanup function */
 static WAVEFILEIN* input_wav;
 static WAVEFILEOUT* output_wav;
-static FILE*        output_bitstream;
-static FILE*        input_bitstream;
-static FILE*        error_pattern_file;
-static FILE*        error_detection_file;
-static FILE*        bitrate_switching_file;
-static FILE *       bandwidth_switching_file;
+
+static FILE* output_bitstream;
+static FILE* input_bitstream;
+static FILE* error_pattern_file;
+static FILE* error_detection_file;
+static FILE* bitrate_switching_file;
+static FILE* bandwidth_switching_file;
 //}}}
 //{{{
 /* check condition and if it fails, exit with error message */
@@ -602,298 +603,298 @@ static void parseCmdl (int ac, char** av, Arguments* arg)
 //}}}
 
 //{{{
-int main (int ac, char** av)
-{
-		Arguments    arg;
-		int          nBytes = 0, i = 0;
-		unsigned int nSamples = 0, nSamplesRead = 0, nSamplesFile = 0xffffffff, sampleRate = 0;
-		short        nChannels = 0, bipsIn = 0;
-		int          real_bitrate = 0, frame = 1, delay = 0;
-		int          encoder_size = 0, decoder_size = 0;
-		LC3_Enc*     encoder = NULL;
-		LC3_Dec*     decoder = NULL;
-		LC3_Error    err     = LC3_OK;
-		int32_t      sample_buf[LC3_MAX_CHANNELS * LC3_MAX_SAMPLES] = {0};
-		int32_t      buf_24[LC3_MAX_CHANNELS * LC3_MAX_SAMPLES] = {0};
-		int16_t      buf_16[LC3_MAX_CHANNELS * LC3_MAX_SAMPLES] = {0};
-		uint8_t      bytes[LC3_MAX_CHANNELS * LC3_MAX_BYTES] = {0};
-		int          dummy_ep_mode = 0;
+int main (int ac, char** av) {
 
-		/* Parse Command-line */
-		printf(LICENSE, LC3_VERSION >> 16, (LC3_VERSION >> 8) & 255, LC3_VERSION & 255);
-		parseCmdl(ac, av, &arg);
+	Arguments    arg;
+	int          nBytes = 0, i = 0;
+	unsigned int nSamples = 0, nSamplesRead = 0, nSamplesFile = 0xffffffff, sampleRate = 0;
+	short        nChannels = 0, bipsIn = 0;
+	int          real_bitrate = 0, frame = 1, delay = 0;
+	int          encoder_size = 0, decoder_size = 0;
+	LC3_Enc*     encoder = NULL;
+	LC3_Dec*     decoder = NULL;
+	LC3_Error    err     = LC3_OK;
+	int32_t      sample_buf[LC3_MAX_CHANNELS * LC3_MAX_SAMPLES] = {0};
+	int32_t      buf_24[LC3_MAX_CHANNELS * LC3_MAX_SAMPLES] = {0};
+	int16_t      buf_16[LC3_MAX_CHANNELS * LC3_MAX_SAMPLES] = {0};
+	uint8_t      bytes[LC3_MAX_CHANNELS * LC3_MAX_BYTES] = {0};
+	int          dummy_ep_mode = 0;
 
-		/* exit handler to clean up resources */
-		atexit(cleanup);
+	/* Parse Command-line */
+	printf (LICENSE, LC3_VERSION >> 16, (LC3_VERSION >> 8) & 255, LC3_VERSION & 255);
+	parseCmdl (ac, av, &arg);
 
-		if (!arg.decoder_only) {
-				/* Open Input Wav File */
-				input_wav = OpenWav(arg.inputFilename, &sampleRate, &nChannels, &nSamplesFile, &bipsIn);
-				exit_if(!input_wav, "Error opening wav file!");
+	/* exit handler to clean up resources */
+	atexit (cleanup);
 
-				/* Setup Encoder */
-				encoder_size = lc3_enc_get_size(sampleRate, nChannels);
-				encoder = malloc(encoder_size);
-				err = lc3_enc_init(encoder, sampleRate, nChannels);
-				exit_if(err, ERROR_MESSAGE[err]);
+	if (!arg.decoder_only) {
+		//{{{  Open Input Wav File 
+		input_wav = OpenWav(arg.inputFilename, &sampleRate, &nChannels, &nSamplesFile, &bipsIn);
+		exit_if(!input_wav, "Error opening wav file!");
 
-				err = lc3_enc_set_frame_ms(encoder, arg.frame_ms);
-				exit_if(err, ERROR_MESSAGE[err]);
+		/* Setup Encoder */
+		encoder_size = lc3_enc_get_size(sampleRate, nChannels);
+		encoder = malloc(encoder_size);
+		err = lc3_enc_init(encoder, sampleRate, nChannels);
+		exit_if(err, ERROR_MESSAGE[err]);
 
-#ifdef ENABLE_HR_MODE_FLAG
-#ifdef ENABLE_HR_MODE
+		err = lc3_enc_set_frame_ms(encoder, arg.frame_ms);
+		exit_if(err, ERROR_MESSAGE[err]);
+
+		#ifdef ENABLE_HR_MODE_FLAG
+			#ifdef ENABLE_HR_MODE
 				err = lc3_enc_set_hrmode(encoder, arg.hrmode);
 				exit_if(err, ERROR_MESSAGE[err]);
-#endif
-#endif
+			#endif
+		#endif
 
-				err = lc3_enc_set_bitrate(encoder, arg.bitrate);
-				exit_if(err, ERROR_MESSAGE[err]);
+		err = lc3_enc_set_bitrate(encoder, arg.bitrate);
+		exit_if(err, ERROR_MESSAGE[err]);
 
-				delay        = arg.dc ? lc3_enc_get_delay(encoder) / arg.dc : 0;
-				nSamples     = lc3_enc_get_input_samples(encoder);
-				real_bitrate = lc3_enc_get_real_bitrate(encoder);
+		delay        = arg.dc ? lc3_enc_get_delay(encoder) / arg.dc : 0;
+		nSamples     = lc3_enc_get_input_samples(encoder);
+		real_bitrate = lc3_enc_get_real_bitrate(encoder);
 
-				if (arg.bandwidth && atoi(arg.bandwidth) == 0)
-				{
-						bandwidth_switching_file = fopen(arg.bandwidth, "rb");
-						exit_if(bandwidth_switching_file == NULL, "Error opening bandwidth switching file!");
-						puts("Using bandwidth switching file!");
-				}
+		if (arg.bandwidth && atoi(arg.bandwidth) == 0) {
+			bandwidth_switching_file = fopen(arg.bandwidth, "rb");
+			exit_if(bandwidth_switching_file == NULL, "Error opening bandwidth switching file!");
+			puts("Using bandwidth switching file!");
+			}
 		}
-		else /* !arg->decoder_only */
-		{
-				/* Open Input Bitstream File */
-				input_bitstream = open_bitstream_reader(arg.inputFilename, &sampleRate, &arg.bitrate, &nChannels,
-																								&nSamplesFile, &arg.frame_ms, &dummy_ep_mode, &arg.hrmode,
-																								arg.formatG192, arg.configFilenameG192);
-				exit_if(!input_bitstream, "Error opening bitstream file!");
+		//}}}
+	else { 
+		//{{{  Open Input Bitstream File 
+		input_bitstream = open_bitstream_reader (arg.inputFilename, &sampleRate, &arg.bitrate, &nChannels,
+																						 &nSamplesFile, &arg.frame_ms, &dummy_ep_mode, &arg.hrmode,
+																						 arg.formatG192, arg.configFilenameG192);
+		exit_if (!input_bitstream, "Error opening bitstream file!");
 		}
+		//}}}
 
-		if (!arg.encoder_only)
-		{
-				/* Setup Decoder */
-				decoder_size = lc3_dec_get_size(sampleRate, nChannels);
-				decoder      = malloc(decoder_size);
-				err          = lc3_dec_init(decoder, sampleRate, nChannels, (LC3_PlcMode)arg.plcMeth);
-				exit_if(err, ERROR_MESSAGE[err]);
-#ifdef ENABLE_HR_MODE_FLAG
-#ifdef ENABLE_HR_MODE
+	if (!arg.encoder_only) {
+		//{{{  Setup Decoder 
+		decoder_size = lc3_dec_get_size(sampleRate, nChannels);
+		decoder      = malloc(decoder_size);
+		err          = lc3_dec_init(decoder, sampleRate, nChannels, (LC3_PlcMode)arg.plcMeth);
+		exit_if(err, ERROR_MESSAGE[err]);
+		#ifdef ENABLE_HR_MODE_FLAG
+			#ifdef ENABLE_HR_MODE
 				err = lc3_dec_set_hrmode(decoder, arg.hrmode);
-#endif
-#endif
+			#endif
+		#endif
 
-				err = lc3_dec_set_frame_ms(decoder, arg.frame_ms);
-				exit_if(err, ERROR_MESSAGE[err]);
-				delay    = arg.dc ? lc3_dec_get_delay(decoder) / arg.dc : 0;
-				nSamples = lc3_dec_get_output_samples(decoder);
+		err = lc3_dec_set_frame_ms(decoder, arg.frame_ms);
+		exit_if(err, ERROR_MESSAGE[err]);
+		delay    = arg.dc ? lc3_dec_get_delay(decoder) / arg.dc : 0;
+		nSamples = lc3_dec_get_output_samples(decoder);
 
-				/* Open Output Wav File */
-				output_wav = CreateWav(arg.outputFilename, sampleRate, nChannels, arg.bipsOut);
-				exit_if(!output_wav, "Error creating wav file!");
+		/* Open Output Wav File */
+		output_wav = CreateWav(arg.outputFilename, sampleRate, nChannels, arg.bipsOut);
+		exit_if(!output_wav, "Error creating wav file!");
 		}
-		else /* !arg->encoder_only */
-		{
-				/* Open Output Bitstream File */
-				output_bitstream = open_bitstream_writer(arg.outputFilename, sampleRate, arg.bitrate, nChannels,
-																								 nSamplesFile, arg.frame_ms, 0, arg.hrmode, arg.formatG192,
-																								 arg.configFilenameG192);
-				exit_if(!output_bitstream, "Error creating bitstream file!");
+		//}}}
+	else { 
+		//{{{  Open Output Bitstream File 
+		output_bitstream = open_bitstream_writer(arg.outputFilename, sampleRate, arg.bitrate, nChannels,
+																						 nSamplesFile, arg.frame_ms, 0, arg.hrmode, arg.formatG192,
+																						 arg.configFilenameG192);
+		exit_if(!output_bitstream, "Error creating bitstream file!");
 		}
+		//}}}
 
-		/* open auxillary files */
-		if (arg.epf)
-		{
-				error_pattern_file = fopen(arg.epf, "rb");
-				exit_if(!error_pattern_file, "Error opening error pattern file!");
+	/* open auxillary files */
+	if (arg.epf) {
+		//{{{
+		error_pattern_file = fopen(arg.epf, "rb");
+		exit_if(!error_pattern_file, "Error opening error pattern file!");
 		}
-		if (arg.bitrate_file)
-		{
-				bitrate_switching_file = fopen(arg.bitrate_file, "rb");
-				exit_if(!bitrate_switching_file, "Error opening bitrate switching file!");
+		//}}}
+	if (arg.bitrate_file) {
+		//{{{
+		bitrate_switching_file = fopen(arg.bitrate_file, "rb");
+		exit_if(!bitrate_switching_file, "Error opening bitrate switching file!");
 		}
-
-		if (arg.edf) {
-				error_detection_file = fopen(arg.edf, "wb");
-				exit_if(!error_detection_file, "Error creating error detection file!");
+		//}}}
+	if (arg.edf) {
+		//{{{
+		error_detection_file = fopen(arg.edf, "wb");
+		exit_if(!error_detection_file, "Error creating error detection file!");
 		}
+		//}}}
 
-		/* Print out info */
-		printf("Encoder size:                  %i\n", encoder_size);
-		printf("Decoder size:                  %i\n", decoder_size);
-		printf("Sample rate:                   %i\n", sampleRate);
-		printf("Channels:                      %i\n", nChannels);
-		printf("Signal length:                 %u\n", nSamplesFile);
-		printf("Frame length:                  %i\n", nSamples);
-		printf("Output format:                 %i bit\n", arg.bipsOut);
-		printf("Target bitrate:                %i\n", arg.bitrate);
-		if (!arg.decoder_only)
-		{
-				printf("Real bitrate:                  %i\n\n", real_bitrate);
-		}
-	printf("Bandwidth cutoff:              %s\n", arg.bandwidth ? arg.bandwidth : "-");
-		printf("High resolution mode:          %s\n\n", arg.hrmode ? "on" : "off");
-		printf("PLC mode:                      %i\n", arg.plcMeth);
+	/* Print out info */
+	printf("Encoder size:         %i\n", encoder_size);
+	printf("Decoder size:         %i\n", decoder_size);
+	printf("Sample rate:          %i\n", sampleRate);
+	printf("Channels:             %i\n", nChannels);
+	printf("Signal length:        %u\n", nSamplesFile);
+	printf("Frame length:         %i\n", nSamples);
+	printf("Output format:        %i bit\n", arg.bipsOut);
+	printf("Target bitrate:       %i\n", arg.bitrate);
+	if (!arg.decoder_only)
+		printf("Real bitrate:         %i\n\n", real_bitrate);
+	printf("Bandwidth cutoff:     %s\n", arg.bandwidth ? arg.bandwidth : "-");
+	printf("High resolution mode: %s\n\n", arg.hrmode ? "on" : "off");
+	printf("PLC mode:             %i\n", arg.plcMeth);
 
-		/* delay compensation */
-		if (arg.dc == 2 && !arg.decoder_only)
-		{
-				ReadWavInt(input_wav, sample_buf, nChannels * delay, &nSamplesRead);
-		}
+	/* delay compensation */
+	if (arg.dc == 2 && !arg.decoder_only)
+		ReadWavInt (input_wav, sample_buf, nChannels * delay, &nSamplesRead);
 
-		/* Encoder + Decoder loop */
-		while (1)
-		{
-				if (!arg.decoder_only)
-				{
-						/* Encoder */
-						int32_t* input24[LC3_MAX_CHANNELS];
-						for (i = 0; i < nChannels; i++) {
-								input24[i] = buf_24 + i * nSamples;
+	/* Encoder + Decoder loop */
+	while (1) {
+		if (!arg.decoder_only) {
+			//{{{
+			/* Encoder */
+			int32_t* input24[LC3_MAX_CHANNELS];
+			for (i = 0; i < nChannels; i++) {
+					input24[i] = buf_24 + i * nSamples;
+			}
+
+			/* read bitrate switching file and set new bitrate */
+			if (bitrate_switching_file)
+			{
+					int32_t new_bitrate = (int32_t) (loopy_read64(bitrate_switching_file));
+					if (arg.verbose && encoder->bitrate != new_bitrate * nChannels)
+					{
+							printf("Switching rate from %d to %d\n", encoder->bitrate,new_bitrate*nChannels);
+					}
+					err = lc3_enc_set_bitrate(encoder, new_bitrate * nChannels);
+					exit_if(err, ERROR_MESSAGE[err]);
+			}
+
+			/* read bandwidth switching file and set bandwidth */
+			if (arg.bandwidth || bandwidth_switching_file)
+			{
+					int32_t bw = bandwidth_switching_file ? (int32_t)loopy_read64(bandwidth_switching_file) : atoi(arg.bandwidth);
+					int32_t bw_old = encoder->bandwidth;
+					err = lc3_enc_set_bandwidth(encoder, bw);
+					if (arg.verbose && bw_old != bw && err == LC3_OK)
+					{
+							printf("Switching bandwidth from %i to %i\n", bw_old, bw);
+					}
+					exit_if(err, ERROR_MESSAGE[err]);
+			}
+
+			/* read audio data */
+			ReadWavInt(input_wav, sample_buf, nSamples * nChannels, &nSamplesRead);
+
+			/* zero out rest of last frame */
+			memset(sample_buf + nSamplesRead, 0, (nSamples * nChannels - nSamplesRead) * sizeof(sample_buf[0]));
+
+			if (nSamplesRead == 0)
+			{
+					break;
+			}
+			if (arg.ept && loopy_read16(error_pattern_file))
+			{
+					nBytes = -1; /* tell encoder packet is lost and trigger PLC */
+			}
+
+			/* deinterleave channels */
+			deinterleave (sample_buf, input24, nSamples, nChannels);
+
+			/* encode */
+			if (bipsIn == 24) {
+					err = lc3_enc24(encoder, input24, bytes, &nBytes);
+			} else if (bipsIn == 32) {
+					err = lc3_enc32(encoder, input24, bytes, &nBytes);
+			} else {
+					int16_t* input16[LC3_MAX_CHANNELS];
+
+					for (i = 0; i < nChannels; i++) {
+							input16[i] = buf_16 + i * nSamples;
+					}
+
+					scale_24_to_16(buf_24, buf_16, nSamples * nChannels);
+					err = lc3_enc16(encoder, input16, bytes, &nBytes);
+			}
+
+			exit_if(err, ERROR_MESSAGE[err]);
+			}
+			//}}}
+		else { 
+			//{{{
+			/* Read bitstream */
+			nBytes = read_bitstream_frame(input_bitstream, bytes, sizeof(bytes), arg.formatG192);
+			if (nBytes < 0)
+			{
+					break;
+			}
+			}
+			//}}}
+
+		if (!arg.encoder_only) {
+			//{{{
+			/* Decoder */
+			/* read error pattern */
+			if (error_pattern_file && loopy_read16(error_pattern_file)) {
+					nBytes = 0; /* tell decoder packet is lost and needs to be concealed */
+			}
+
+			int32_t* output24[LC3_MAX_CHANNELS];
+
+			for (i = 0; i < nChannels; i++) {
+					output24[i] = buf_24 + i * nSamples;
+			}
+
+			/* Run Decoder */
+			if (arg.bipsOut == 24) {
+					err = lc3_dec24(decoder, bytes, nBytes, output24);
+			} else if (arg.bipsOut == 32) {
+					err = lc3_dec32(decoder, bytes, nBytes, output24);
+			} else {
+					int16_t* output16[LC3_MAX_CHANNELS];
+
+					for (i = 0; i < nChannels; i++) {
+						output16[i] = buf_16 + i * nSamples;
 						}
 
-						/* read bitrate switching file and set new bitrate */
-						if (bitrate_switching_file)
-						{
-								int32_t new_bitrate = (int32_t) (loopy_read64(bitrate_switching_file));
-								if (arg.verbose && encoder->bitrate != new_bitrate * nChannels)
-								{
-										printf("Switching rate from %d to %d\n", encoder->bitrate,new_bitrate*nChannels);
-								}
-								err = lc3_enc_set_bitrate(encoder, new_bitrate * nChannels);
-								exit_if(err, ERROR_MESSAGE[err]);
-						}
-						/* read bandwidth switching file and set bandwidth */
-						if (arg.bandwidth || bandwidth_switching_file)
-						{
-								int32_t bw = bandwidth_switching_file ? (int32_t)loopy_read64(bandwidth_switching_file) : atoi(arg.bandwidth);
-								int32_t bw_old = encoder->bandwidth;
-								err = lc3_enc_set_bandwidth(encoder, bw);
-								if (arg.verbose && bw_old != bw && err == LC3_OK)
-								{
-										printf("Switching bandwidth from %i to %i\n", bw_old, bw);
-								}
-								exit_if(err, ERROR_MESSAGE[err]);
-						}
+					err = lc3_dec16(decoder, bytes, nBytes, output16);
+					scale_16_to_24(buf_16, buf_24, nSamples * nChannels);
+			}
+			exit_if (err && err != LC3_DECODE_ERROR, ERROR_MESSAGE[err]);
 
-						/* read audio data */
-						ReadWavInt(input_wav, sample_buf, nSamples * nChannels, &nSamplesRead);
-						/* zero out rest of last frame */
-						memset(sample_buf + nSamplesRead, 0, (nSamples * nChannels - nSamplesRead) * sizeof(sample_buf[0]));
-
-						if (nSamplesRead == 0)
-						{
-								break;
-						}
-						if (arg.ept && loopy_read16(error_pattern_file))
-						{
-								nBytes = -1; /* tell encoder packet is lost and trigger PLC */
-						}
-
-						/* deinterleave channels */
-						deinterleave(sample_buf, input24, nSamples, nChannels);
-
-						/* encode */
-
-						if (bipsIn == 24) {
-								err = lc3_enc24(encoder, input24, bytes, &nBytes);
-						} else if (bipsIn == 32) {
-								err = lc3_enc32(encoder, input24, bytes, &nBytes);
-						} else {
-								int16_t* input16[LC3_MAX_CHANNELS];
-
-								for (i = 0; i < nChannels; i++) {
-										input16[i] = buf_16 + i * nSamples;
-								}
-
-								scale_24_to_16(buf_24, buf_16, nSamples * nChannels);
-								err = lc3_enc16(encoder, input16, bytes, &nBytes);
-						}
-
-						exit_if(err, ERROR_MESSAGE[err]);
-				}
-				else /* !arg.decoder_only */
-				{
-						/* Read bitstream */
-						nBytes = read_bitstream_frame(input_bitstream, bytes, sizeof(bytes), arg.formatG192);
-						if (nBytes < 0)
-						{
-								break;
-						}
-				}
-
-				if (!arg.encoder_only)
-				{
-						/* Decoder */
-						/* read error pattern */
-						if (error_pattern_file && loopy_read16(error_pattern_file)) {
-								nBytes = 0; /* tell decoder packet is lost and needs to be concealed */
-						}
-
-						int32_t* output24[LC3_MAX_CHANNELS];
-
-						for (i = 0; i < nChannels; i++) {
-								output24[i] = buf_24 + i * nSamples;
-						}
-
-						/* Run Decoder */
-						if (arg.bipsOut == 24) {
-								err = lc3_dec24(decoder, bytes, nBytes, output24);
-						} else if (arg.bipsOut == 32) {
-								err = lc3_dec32(decoder, bytes, nBytes, output24);
-						} else {
-								int16_t* output16[LC3_MAX_CHANNELS];
-
-								for (i = 0; i < nChannels; i++) {
-										output16[i] = buf_16 + i * nSamples;
-								}
-
-								err = lc3_dec16(decoder, bytes, nBytes, output16);
-								scale_16_to_24(buf_16, buf_24, nSamples * nChannels);
-						}
-						exit_if(err && err != LC3_DECODE_ERROR, ERROR_MESSAGE[err]);
-
-						/* write error detection to file */
-						if (error_detection_file != NULL)
-						{
-								int16_t tmp = (err == LC3_DECODE_ERROR);
-								fwrite(&tmp, 2, 1, error_detection_file);
-						}
-
-						/* interleave samples for writing */
-						interleave(output24, sample_buf, nSamples, nChannels);
-						/* Write frame to file */
-						WriteWavLong(output_wav, sample_buf + delay * nChannels, MIN(nSamples - delay, nSamplesFile) * nChannels);
-						nSamplesFile -= nSamples - delay;
-						delay = 0;
-				}
-				else /* !arg.encoder_only */
-				{
-						write_bitstream_frame(output_bitstream, bytes, nBytes, arg.formatG192);
+			/* write error detection to file */
+			if (error_detection_file != NULL) {
+				int16_t tmp = (err == LC3_DECODE_ERROR);
+				fwrite (&tmp, 2, 1, error_detection_file);
 				}
 
-				if (!arg.hide_counter)
-				{
-						printf("\rProcessing frame %i", frame++);
-						fflush(stdout);
-				}
+			/* interleave samples for writing */
+			interleave (output24, sample_buf, nSamples, nChannels);
+
+			/* Write frame to file */
+			WriteWavLong (output_wav, sample_buf + delay * nChannels, MIN(nSamples - delay, nSamplesFile) * nChannels);
+			nSamplesFile -= nSamples - delay;
+			delay = 0;
+			}
+			//}}}
+		else  
+			write_bitstream_frame(output_bitstream, bytes, nBytes, arg.formatG192);
+
+		if (!arg.hide_counter) {
+			//{{{
+			printf ("\rProcessing frame %i", frame++);
+			fflush(stdout);
+			}
+			//}}}
 		}
 
-		if (!arg.encoder_only && nSamplesFile > 0 && nSamplesFile < nSamples)
-		{
-				memset(sample_buf, 0, (nSamplesFile * nChannels) * sizeof(sample_buf[0]));
-				WriteWavLong(output_wav, sample_buf, nSamplesFile * nChannels);
+	if (!arg.encoder_only && nSamplesFile > 0 && nSamplesFile < nSamples) {
+		//{{{
+		memset (sample_buf, 0, (nSamplesFile * nChannels) * sizeof(sample_buf[0]));
+		WriteWavLong(output_wav, sample_buf, nSamplesFile * nChannels);
 		}
+		//}}}
 
-		puts("\nProcessing done!");
-		if (output_wav)
-		{
-				printf("%i samples clipped!\n", output_wav->clipCount);
-		}
+	puts("\nProcessing done!");
+	if (output_wav)
+		printf ("%i samples clipped!\n", output_wav->clipCount);
 
-		lc3_enc_free_memory(encoder);
-		lc3_dec_free_memory(decoder);
+	lc3_enc_free_memory (encoder);
+	lc3_dec_free_memory (decoder);
 
-		return 0;
-}
+	return 0;
+	}
 //}}}

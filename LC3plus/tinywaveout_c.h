@@ -1,3 +1,4 @@
+//{{{
 /******************************************************************************
 *                        ETSI TS 103 634 V1.1.1                               *
 *              Low Complexity Communication Codec Plus (LC3plus)              *
@@ -33,16 +34,16 @@
     $Header: /home/cvs/amm/menc/tinywaveout1/include/tinywaveout_c.h,v 1.21
    2014-11-27 10:23:58 jdr Exp $
 */
-
+//}}}
 #ifndef __TINYWAVEOUT_C_H__
 #define __TINYWAVEOUT_C_H__
-
+//{{{  includes defines
 #include <stdio.h>
 
 /*#define SUPPORT_BWF*/
 
 #ifdef SUPPORT_BWF
-#include <string.h>
+  #include <string.h>
 #endif
 
 #if defined(__i386__) || defined(_M_IX86) || defined(_M_X64) ||                \
@@ -80,55 +81,61 @@
 #define TWO_INT64 __int64
 #endif
 #endif
+//}}}
 
 #ifdef SUPPORT_BWF
-typedef struct {
-  float loudnessVal;
-  float loudnessRange;
-  float maxTruePeakLevel;
-  float maxMomentaryLoudnes;
-  float maxShortTermLoudness;
-} LOUDNESSINFO;
+  //{{{
+  typedef struct {
+    float loudnessVal;
+    float loudnessRange;
+    float maxTruePeakLevel;
+    float maxMomentaryLoudnes;
+    float maxShortTermLoudness;
+  } LOUDNESSINFO;
+  //}}}
 #else
-typedef void LOUDNESSINFO;
+  typedef void LOUDNESSINFO;
 #endif
 
+//{{{
 typedef struct __tinyWaveOutHeader {
   unsigned int riffType;
   unsigned int riffSize;
 
   unsigned int waveType;
 } __tinyWaveOutHeader;
-
+//}}}
 #ifdef SUPPORT_BWF
-typedef struct __tinyWaveOutBextChunk {
-  unsigned int formatType; /* = 'bext' */
-  unsigned int formatSize; /* size info */
+  //{{{
+  typedef struct __tinyWaveOutBextChunk {
+    unsigned int formatType; /* = 'bext' */
+    unsigned int formatSize; /* size info */
 
-  unsigned char description[256];
-  unsigned char originator[32];
-  unsigned char originatorReference[32];
-  unsigned char originatorDate[10]; /* ASCII: <<yyyy:mm:dd>> */
-  unsigned char originationTime[8]; /* ASCII: <<hh:mm:ss>> */
-  unsigned int timeReferenceLow;
-  unsigned int timeReferenceHigh;
-  unsigned short version;
-  unsigned char UMID[64]; /* Binary Bytes of SMPTE UMID */
+    unsigned char description[256];
+    unsigned char originator[32];
+    unsigned char originatorReference[32];
+    unsigned char originatorDate[10]; /* ASCII: <<yyyy:mm:dd>> */
+    unsigned char originationTime[8]; /* ASCII: <<hh:mm:ss>> */
+    unsigned int timeReferenceLow;
+    unsigned int timeReferenceHigh;
+    unsigned short version;
+    unsigned char UMID[64]; /* Binary Bytes of SMPTE UMID */
 
-  signed short loudnessVal;
-  signed short loudnessRange;
-  signed short maxTruePeakLevel;
-  signed short maxMomentaryLoudnes;
-  signed short maxShortTermLoudness;
+    signed short loudnessVal;
+    signed short loudnessRange;
+    signed short maxTruePeakLevel;
+    signed short maxMomentaryLoudnes;
+    signed short maxShortTermLoudness;
 
-  unsigned char Reserved[180];
+    unsigned char Reserved[180];
 
-  unsigned char
-      codingHistory; /* ASCII: <<History coding>> - undefined length! */
-                     /* for variable length, mve this out of this struct */
-} __tinyWaveOutBextChunk;
+    unsigned char
+        codingHistory; /* ASCII: <<History coding>> - undefined length! */
+                       /* for variable length, mve this out of this struct */
+  } __tinyWaveOutBextChunk;
+  //}}}
 #endif
-
+//{{{
 typedef struct __tinyWaveOutFmtChunk {
   unsigned int formatType;
   unsigned int formatSize;
@@ -142,13 +149,15 @@ typedef struct __tinyWaveOutFmtChunk {
 
   /* wav fmt ext hdr here */
 } __tinyWaveOutFmtChunk;
-
+//}}}
+//{{{
 typedef struct __tinyWaveOutDataChunk {
   unsigned int dataType;
   unsigned int dataSize;
 
 } __tinyWaveOutDataChunk;
-
+//}}}
+//{{{
 typedef struct __tinyWaveOutHandle {
   FILE *theFile;
   unsigned int dataSize;
@@ -161,6 +170,7 @@ typedef struct __tinyWaveOutHandle {
   unsigned int bps;
   unsigned int clipCount;
 } __tinyWaveOutHandle, WAVEFILEOUT;
+//}}}
 
 /*--- local protos --------------------------------------------------*/
 static __inline unsigned int BigEndian32(char, char, char, char);
@@ -168,26 +178,29 @@ static __inline unsigned int LittleEndian32(unsigned int);
 static __inline unsigned int LittleEndian32s(int);
 static __inline short LittleEndian16(short);
 #ifdef SUPPORT_BWF
-static unsigned int EncodeLoudness(float);
+  static unsigned int EncodeLoudness(float);
 #endif
-static __inline int __dataSizeChk(WAVEFILEOUT *self, int newbytes);
+static __inline int __dataSizeChk (WAVEFILEOUT *self, int newbytes);
 
 #if defined(_MSC_VER)
-#pragma pack(pop)
+  #pragma pack(pop)
 #else
-#pragma pack()
+  #pragma pack()
 #endif
 
 #ifdef SUPPORT_BWF
-static void setDefaultLoudness(LOUDNESSINFO *x) {
-  x->loudnessVal = 1.0f;
-  x->loudnessRange = 2.0f;
-  x->maxTruePeakLevel = 3.0f;
-  x->maxMomentaryLoudnes = 4.0f;
-  x->maxShortTermLoudness = 5.0f;
-}
+  //{{{
+  static void setDefaultLoudness(LOUDNESSINFO *x) {
+    x->loudnessVal = 1.0f;
+    x->loudnessRange = 2.0f;
+    x->maxTruePeakLevel = 3.0f;
+    x->maxMomentaryLoudnes = 4.0f;
+    x->maxShortTermLoudness = 5.0f;
+  }
+  //}}}
 #endif
 
+//{{{
 static WAVEFILEOUT *CreateBWF(const char *fileName,
                               const unsigned int sampleRate,
                               const unsigned int numChannels,
@@ -311,7 +324,8 @@ bail:
   free(self);
   return NULL;
 }
-
+//}}}
+//{{{
 static WAVEFILEOUT *CreateWav(const char *fileName,
                               const unsigned int sampleRate,
                               const unsigned int numChannels,
@@ -320,9 +334,11 @@ static WAVEFILEOUT *CreateWav(const char *fileName,
 ) {
   return CreateBWF(fileName, sampleRate, numChannels, bps);
 }
+//}}}
 
 #define MAX_PCM16 (+32767)
 #define MIN_PCM16 (-32768)
+//{{{
 static __inline int CLIP_PCM16(int sample, unsigned int *clipcount) {
   int tmp = sample;
 
@@ -338,9 +354,11 @@ static __inline int CLIP_PCM16(int sample, unsigned int *clipcount) {
 
   return tmp;
 }
+//}}}
 
 #define MAX_PCM24 (+8388607)
 #define MIN_PCM24 (-8388608)
+//{{{
 static __inline int CLIP_PCM24(int sample, unsigned int *clipcount) {
   int tmp = sample;
 
@@ -356,9 +374,11 @@ static __inline int CLIP_PCM24(int sample, unsigned int *clipcount) {
 
   return tmp;
 }
+//}}}
 
 #define MAX_FLOAT32 (+1.0f)
 #define MIN_FLOAT32 (-1.0f)
+//{{{
 static __inline float CLIP_FLOAT32(float sample, unsigned int *clipcount) {
   float tmp = sample;
 
@@ -374,7 +394,9 @@ static __inline float CLIP_FLOAT32(float sample, unsigned int *clipcount) {
 
   return tmp;
 }
+//}}}
 
+//{{{
 static int __WriteSample16(WAVEFILEOUT *self, int sample, int scale) {
   size_t cnt;
   short v;
@@ -398,7 +420,8 @@ static int __WriteSample16(WAVEFILEOUT *self, int sample, int scale) {
 
   return __TWO_ERROR;
 }
-
+//}}}
+//{{{
 static int __WriteSample24(WAVEFILEOUT *self, int sample, int scale) {
   size_t cnt;
   int v;
@@ -421,7 +444,8 @@ static int __WriteSample24(WAVEFILEOUT *self, int sample, int scale) {
 
   return __TWO_ERROR;
 }
-
+//}}}
+//{{{
 static int __WriteSample32(WAVEFILEOUT *self, int sample) {
   size_t cnt;
   int v = 0;
@@ -439,7 +463,8 @@ static int __WriteSample32(WAVEFILEOUT *self, int sample) {
 
   return __TWO_ERROR;
 }
-
+//}}}
+//{{{
 static int __WriteSampleInt(WAVEFILEOUT *self, int sample, int scale) {
   int err;
 
@@ -467,37 +492,8 @@ static int __WriteSampleInt(WAVEFILEOUT *self, int sample, int scale) {
 
   return err;
 }
-
-/* this function expects values in the 16 bit range +-32767/8 */
-/* static int WriteWavShort(
-                         WAVEFILEOUT* self,
-                         short        sampleBuffer[],
-                         unsigned int nSamples
-                         )
-{
-  unsigned long i;
-  int err = __TWO_SUCCESS;
-
-  if (!self)         return __TWO_ERROR;
-  if (!sampleBuffer) return __TWO_ERROR;
-  if (__dataSizeChk(self, nSamples * sizeof(short))) return __TWO_ERROR;
-
-  for (i=0; i< nSamples; i++) {
-    if (self->bps == 32)
-    {
-      err = __WriteSample32(self, sampleBuffer[i] / 32768.0f);
-    }
-    else
-    {
-      err = __WriteSampleInt(self, (int)sampleBuffer[i], 16);
-    }
-    if (err != __TWO_SUCCESS) return err;
-  }
-
-  return __TWO_SUCCESS;
-}
-*/
-
+//}}}
+//{{{
 /* this function expects values in the 24 bit range +-8388607/8 */
 static int WriteWavLong(WAVEFILEOUT *self, int sampleBuffer[],
                         unsigned int nSamples) {
@@ -523,11 +519,13 @@ static int WriteWavLong(WAVEFILEOUT *self, int sampleBuffer[],
 
   return __TWO_SUCCESS;
 }
+//}}}
 
 /* this function expects normalized values in the range +-1.0 */
 #define MAX_FL (+2.0f * 8388608.0f)
 #define MIN_FL (-2.0f * 8388608.0f)
 #define CLIP_FL(x) (((x) >= MAX_FL) ? MAX_FL : (((x) <= MIN_FL) ? MIN_FL : (x)))
+//{{{
 /* static int WriteWavFloat(
                          WAVEFILEOUT* self,
                          float        sampleBuffer[],
@@ -557,7 +555,9 @@ static int WriteWavLong(WAVEFILEOUT *self, int sampleBuffer[],
   return __TWO_SUCCESS;
 }
 */
+//}}}
 
+//{{{
 static int CloseWav(WAVEFILEOUT *self) {
   unsigned int riffSize_le = 0;
   unsigned int dataSize_le = 0;
@@ -596,8 +596,10 @@ static int CloseWav(WAVEFILEOUT *self) {
 
   return __TWO_SUCCESS;
 }
+//}}}
 
 #ifdef SUPPORT_BWF
+//{{{
 static int CloseBWF(WAVEFILEOUT *self, LOUDNESSINFO bextData) {
   int wordData;
 
@@ -627,11 +629,10 @@ static int CloseBWF(WAVEFILEOUT *self, LOUDNESSINFO bextData) {
 
   return CloseWav(self);
 }
+//}}}
 #endif
 
-/*------------- local subs ----------------*/
-
-
+//{{{
 static __inline unsigned int BigEndian32(char a, char b, char c, char d) {
 #ifdef __TWO_LE
   return (unsigned int)d << 24 | (unsigned int)c << 16 | (unsigned int)b << 8 |
@@ -641,7 +642,8 @@ static __inline unsigned int BigEndian32(char a, char b, char c, char d) {
          (unsigned int)d;
 #endif
 }
-
+//}}}
+//{{{
 static __inline unsigned int LittleEndian32(unsigned int v) {
 #ifdef __TWO_LE
   return v;
@@ -650,7 +652,8 @@ static __inline unsigned int LittleEndian32(unsigned int v) {
          (v & 0x00FF0000) >> 8 | (v & 0xFF000000) >> 24;
 #endif
 }
-
+//}}}
+//{{{
 /* signed version of the above */
 static __inline unsigned int LittleEndian32s(int v) {
 #ifdef __TWO_LE
@@ -660,7 +663,8 @@ static __inline unsigned int LittleEndian32s(int v) {
          (v & 0x00FF0000) >> 8 | (v & 0xFF000000) >> 24;
 #endif
 }
-
+//}}}
+//{{{
 static __inline short LittleEndian16(short v) {
 #ifdef __TWO_LE
   return v;
@@ -668,14 +672,16 @@ static __inline short LittleEndian16(short v) {
   return ((v << 8) & 0xFF00) | ((v >> 8) & 0x00FF);
 #endif
 }
-
+//}}}
 #ifdef SUPPORT_BWF
-static unsigned int EncodeLoudness(float x) {
-  int s = (x > 0) - (x < 0);
-  return (int)(x * 100.0f + s * 0.5f);
-}
+  //{{{
+  static unsigned int EncodeLoudness(float x) {
+    int s = (x > 0) - (x < 0);
+    return (int)(x * 100.0f + s * 0.5f);
+  }
+  //}}}
 #endif
-
+//{{{
 static __inline int __dataSizeChk(WAVEFILEOUT *self, int newbytes) {
   if (!self)
     return __TWO_ERROR;
@@ -687,5 +693,6 @@ static __inline int __dataSizeChk(WAVEFILEOUT *self, int newbytes) {
 
   return __TWO_SUCCESS;
 }
+//}}}
 
 #endif /* __TINYWAVEOUT_C_H__ */

@@ -262,23 +262,7 @@ namespace audio {
     int getNumOutputChannels() const noexcept { return isOutput() ? mMixFormat.Format.nChannels : 0; }
 
     DWORD getSampleRate() const noexcept { return mMixFormat.Format.nSamplesPerSec; }
-    //{{{
-    bool setSampleRate (DWORD sampleRate) {
-
-      mMixFormat.Format.nSamplesPerSec = sampleRate;
-      fixupMixFormat();
-
-      return true;
-      }
-    //}}}
-
     UINT32 getBufferSizeFrames() const noexcept { return mBufferFrameCount; }
-    //{{{
-    bool setBufferSizeFrames (UINT32 bufferSize) {
-      mBufferFrameCount = bufferSize;
-      return true;
-      }
-    //}}}
 
     bool isRunning() const noexcept { return mRunning; }
     //{{{
@@ -297,8 +281,24 @@ namespace audio {
       return num_frames_available > 0;
       }
     //}}}
-    void wait() const { WaitForSingleObject (mEventHandle, INFINITE); }
 
+    //{{{
+    bool setSampleRate (DWORD sampleRate) {
+
+      mMixFormat.Format.nSamplesPerSec = sampleRate;
+      fixupMixFormat();
+
+      return true;
+      }
+    //}}}
+    //{{{
+    bool setBufferSizeFrames (UINT32 bufferSize) {
+      mBufferFrameCount = bufferSize;
+      return true;
+      }
+    //}}}
+
+    void wait() const { WaitForSingleObject (mEventHandle, INFINITE); }
     //{{{
     void process (const std::function<void (cAudioDevice&, cAudioBuffer&)>& callback) {
 
@@ -384,18 +384,15 @@ namespace audio {
         if (FAILED(hr))
           return false;
 
-        /*HRESULT render_hr =*/ mAudioClient->GetService (cWaspiUtil::getIAudioRenderClientInterfaceId(), reinterpret_cast<void**>(&mAudioRenderClient));
-        /*HRESULT capture_hr =*/ mAudioClient->GetService (cWaspiUtil::getIAudioCaptureClientInterfaceId(), reinterpret_cast<void**>(&mAudioCaptureClient));
+        mAudioClient->GetService (cWaspiUtil::getIAudioRenderClientInterfaceId(), reinterpret_cast<void**>(&mAudioRenderClient));
+        mAudioClient->GetService (cWaspiUtil::getIAudioCaptureClientInterfaceId(), reinterpret_cast<void**>(&mAudioCaptureClient));
 
         // TODO: Make sure to clean up more gracefully from errors
-        hr = mAudioClient->GetBufferSize (&mBufferFrameCount);
-        if (FAILED (hr))
+        if (FAILED (mAudioClient->GetBufferSize (&mBufferFrameCount)))
           return false;
-        hr = mAudioClient->SetEventHandle (mEventHandle);
-        if (FAILED (hr))
+        if (FAILED (mAudioClient->SetEventHandle (mEventHandle)))
           return false;
-        hr = mAudioClient->Start();
-        if (FAILED (hr))
+        if (FAILED (hr = mAudioClient->Start()))
           return false;
 
         mRunning = true;
@@ -403,7 +400,7 @@ namespace audio {
           [this]() {
             SetThreadPriority (GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
             while (mRunning) {
-              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback); 
+              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback);
               wait();
               }
             }

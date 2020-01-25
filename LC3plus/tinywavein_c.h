@@ -1,3 +1,4 @@
+//{{{
 /******************************************************************************
 *                        ETSI TS 103 634 V1.1.1                               *
 *              Low Complexity Communication Codec Plus (LC3plus)              *
@@ -6,16 +7,17 @@
 * Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
 * estoppel or otherwise.                                                      *
 ******************************************************************************/
-
+//}}}
 #ifndef __TINYWAVEIN_C_H__
 #define __TINYWAVEIN_C_H__
-
 /*#define SUPPORT_BWF*/
 
+//{{{
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+//}}}
+//{{{
 #if defined(__i386__) || defined(_M_IX86) || defined(__x86_64__) ||            \
     defined(_M_X64) || defined(__arm__) || defined(__aarch64__)
 #define __TWI_LE /* _T_iny _W_ave _I_n _L_ittle _E_ndian */
@@ -41,7 +43,9 @@ typedef struct {
   float maxShortTermLoudness;
 } WAVEIN_LOUDNESSINFO;
 #endif
+//}}}
 
+//{{{
 typedef struct __tinyWaveInHandle {
   FILE *theFile;
   fpos_t dataChunkPos;
@@ -52,7 +56,8 @@ typedef struct __tinyWaveInHandle {
   WAVEIN_LOUDNESSINFO *loudnessInfo;
 #endif
 } __tinyWaveInHandle, WAVEFILEIN;
-
+//}}}
+//{{{
 typedef struct {
   short compressionCode;
   short numberOfChannels;
@@ -62,8 +67,9 @@ typedef struct {
   short bitsPerSample;
   /* short extraFormatBytes ; */
 } SWavInfo;
-
+//}}}
 #ifdef SUPPORT_BWF
+//{{{
 typedef struct {
   unsigned char description[256];
   unsigned char originator[32];
@@ -85,22 +91,25 @@ typedef struct {
 
   unsigned char codingHistory; /* ASCII: <<History coding>> */
 } SBwfWav;
+//}}}
 #endif
-
+//{{{
 typedef struct {
   char chunkID[4];
   unsigned int chunkSize;
   /* long dataOffset ; */ /* never used */
 } SChunk;
+//}}}
 
 /* local wrapper, always returns correct endian */
 static size_t fread_LE(void *ptr, size_t size, size_t nmemb, FILE *stream);
 
 #ifdef __TWI_BE
-static short BigEndian16(short v);
-static int BigEndian32(int v);
+  static short BigEndian16(short v);
+  static int BigEndian32(int v);
 #endif
 
+//{{{
 /*!
  *  \brief Read header from a WAVEfile. Host endianess is handled accordingly.
  *  \fp filepointer of type FILE*.
@@ -236,7 +245,7 @@ static WAVEFILEIN *OpenWav(const char *filename, unsigned int *samplerate,
 #endif
 
   /* skip some potential chunks up to fmt chunk */
-  
+
   while (strncmp("fmt ", fmt_chunk.chunkID, 4) != 0) {
     unsigned int chunkSize = 0;
 
@@ -355,13 +364,17 @@ bail:
   free(self);
   return NULL;
 }
+//}}}
 
 #ifdef SUPPORT_BWF
-static void ReadBWF(WAVEFILEIN *self, WAVEIN_LOUDNESSINFO **wavInLoudness) {
-  *wavInLoudness = self->loudnessInfo;
-}
+  //{{{
+  static void ReadBWF(WAVEFILEIN *self, WAVEIN_LOUDNESSINFO **wavInLoudness) {
+    *wavInLoudness = self->loudnessInfo;
+    }
+  //}}}
 #endif
 
+//{{{
 static int __ReadSample16(WAVEFILEIN *self, int *sample, int scale) {
   size_t cnt;
   short v = 0;
@@ -385,7 +398,8 @@ static int __ReadSample16(WAVEFILEIN *self, int *sample, int scale) {
 
   return __TWI_SUCCESS;
 }
-
+//}}}
+//{{{
 static int __ReadSample24(WAVEFILEIN *self, int *sample, int scale) {
   size_t cnt;
   int v = 0;
@@ -413,7 +427,8 @@ static int __ReadSample24(WAVEFILEIN *self, int *sample, int scale) {
 
   return __TWI_SUCCESS;
 }
-
+//}}}
+//{{{
 static int __ReadSample32(WAVEFILEIN *self, int *sample) {
   size_t cnt;
   int v = 0;
@@ -434,7 +449,8 @@ static int __ReadSample32(WAVEFILEIN *self, int *sample) {
 
   return __TWI_SUCCESS;
 }
-
+//}}}
+//{{{
 static int __ReadSampleInternal(WAVEFILEIN *self, int *sample, int scale) {
   int err;
 
@@ -459,7 +475,9 @@ static int __ReadSampleInternal(WAVEFILEIN *self, int *sample, int scale) {
 
   return err;
 }
+//}}}
 
+//{{{
 /* not fully tested */
 /* this function returns normalized values in the range +32767..-32768 */
 /* static int ReadWavShort(
@@ -504,7 +522,8 @@ static int __ReadSampleInternal(WAVEFILEIN *self, int *sample, int scale) {
   return __TWI_SUCCESS;
 }
 */
-
+//}}}
+//{{{
 /* not fully tested */
 /* this function returns normalized values in the range +8388607..-8388608 */
 static int ReadWavInt(WAVEFILEIN *self, int sampleBuffer[],
@@ -547,7 +566,8 @@ static int ReadWavInt(WAVEFILEIN *self, int sampleBuffer[],
 
   return __TWI_SUCCESS;
 }
-
+//}}}
+//{{{
 static int CloseWavIn(WAVEFILEIN *self) {
   if (self) {
     if (self->theFile) {
@@ -558,7 +578,9 @@ static int CloseWavIn(WAVEFILEIN *self) {
 
   return __TWI_SUCCESS;
 }
+//}}}
 /*
+//{{{
 static int ResetWavIn(WAVEFILEIN* self)
 {
   if (self) {
@@ -569,9 +591,11 @@ static int ResetWavIn(WAVEFILEIN* self)
   }
   return __TWI_SUCCESS;
 }
+//}}}
 */
-/*------------- local subs ----------------*/
 
+/*------------- local subs ----------------*/
+//{{{
 static size_t fread_LE(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 #ifdef __TWI_LE
   return fread(ptr, size, nmemb, stream);
@@ -592,15 +616,18 @@ static size_t fread_LE(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   return len;
 #endif
 }
+//}}}
 
 #ifdef __TWI_BE
+//{{{
 static short BigEndian16(short v) {
   short a = (v & 0x0ff);
   short b = (v & 0x0ff00) >> 8;
 
   return a << 8 | b;
 }
-
+//}}}
+//{{{
 static int BigEndian32(int v) {
   int a = (v & 0x0ff);
   int b = (v & 0x0ff00) >> 8;
@@ -609,6 +636,7 @@ static int BigEndian32(int v) {
 
   return a << 24 | b << 16 | c << 8 | d;
 }
+//}}}
 #endif
 
 #endif /* __TINYWAVEIN_C_H__ */
