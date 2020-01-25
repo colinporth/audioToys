@@ -379,7 +379,6 @@ namespace audio {
         HRESULT hr = mAudioClient->Initialize (AUDCLNT_SHAREMODE_SHARED,
                                                AUDCLNT_STREAMFLAGS_RATEADJUST | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                                                buffer_duration, periodicity, &mMixFormat.Format, nullptr);
-
         // TODO: Deal with AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED return code by resetting the buffer_duration and retrying:
         // https://docs.microsoft.com/en-us/windows/desktop/api/audioclient/nf-audioclient-iaudioclient-initialize
         if (FAILED(hr))
@@ -404,7 +403,8 @@ namespace audio {
           [this]() {
             SetThreadPriority (GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
             while (mRunning) {
-              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback); wait();
+              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback); 
+              wait();
               }
             }
           };

@@ -163,8 +163,7 @@ int main() {
   //}}}
 
   device->connect ([=] (cAudioDevice& device, cAudioBuffer& buffer) mutable noexcept {
-    cLog::log (LOGINFO, " connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), buffer.getSizeFrames());
-
+    cLog::log (LOGINFO, "connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), buffer.getSizeFrames());
     for (int frame = 0; frame < buffer.getSizeFrames(); ++frame) {
       auto nextSample = synth.getNextSample();
       for (int channel = 0; channel < buffer.getSizeChannels(); ++channel)
@@ -185,7 +184,8 @@ int main() {
     //}}}
     });
 
-  device->start();
+  device->start ([=](cAudioDevice& device) { cLog::log (LOGINFO, "startCallback"); },
+                 [=](cAudioDevice& device) { cLog::log (LOGINFO, "stopCallback");  } );
   while (!stop.load()) {
     this_thread::sleep_for (chrono::milliseconds (50));
     }
