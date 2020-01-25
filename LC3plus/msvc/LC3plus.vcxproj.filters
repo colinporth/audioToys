@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\adjust_global_gain.c" />
+    <ClCompile Include="..\apply_global_gain.c" />
+    <ClCompile Include="..\ari_codec.c" />
+    <ClCompile Include="..\attack_detector.c" />
+    <ClCompile Include="..\codec_exe.c" />
+    <ClCompile Include="..\constants.c" />
+    <ClCompile Include="..\cutoff_bandwidth.c" />
+    <ClCompile Include="..\dct4.c" />
+    <ClCompile Include="..\dec_entropy.c" />
+    <ClCompile Include="..\dec_lc3_fl.c" />
+    <ClCompile Include="..\detect_cutoff_warped.c" />
+    <ClCompile Include="..\enc_entropy.c" />
+    <ClCompile Include="..\enc_lc3_fl.c" />
+    <ClCompile Include="..\estimate_global_gain.c" />
+    <ClCompile Include="..\fft.c" />
+    <ClCompile Include="..\imdct.c" />
+    <ClCompile Include="..\lc3.c" />
+    <ClCompile Include="..\ltpf_coder.c" />
+    <ClCompile Include="..\ltpf_decoder.c" />
+    <ClCompile Include="..\mdct.c" />
+    <ClCompile Include="..\mdct_shaping.c" />
+    <ClCompile Include="..\noise_factor.c" />
+    <ClCompile Include="..\noise_filling.c" />
+    <ClCompile Include="..\olpa.c" />
+    <ClCompile Include="..\per_band_energy.c" />
+    <ClCompile Include="..\plc.c" />
+    <ClCompile Include="..\quantize_spec.c" />
+    <ClCompile Include="..\resamp12k8.c" />
+    <ClCompile Include="..\residual_coding.c" />
+    <ClCompile Include="..\residual_decoding.c" />
+    <ClCompile Include="..\setup_dec_lc3.c" />
+    <ClCompile Include="..\setup_enc_lc3.c" />
+    <ClCompile Include="..\sns_compute_scf.c" />
+    <ClCompile Include="..\sns_interpolate_scf.c" />
+    <ClCompile Include="..\sns_quantize_scf.c" />
+    <ClCompile Include="..\tns_coder.c" />
+    <ClCompile Include="..\tns_decoder.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\lc3.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\functions.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\setup_dec_lc3.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\setup_enc_lc3.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\constants.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\defines.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\file_io.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\structs.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tinywavein_c.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tinywaveout_c.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\util.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\clib.h">
+      <Filter>h</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="h">
+      <UniqueIdentifier>{dc876336-99ab-499f-b384-f2ead4ae043e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

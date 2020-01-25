@@ -29,7 +29,7 @@
 //}}}
 
 namespace audio {
-  // audioBuffer
+  // cAudioBuffer
   //{{{
   class cAudioBuffer {
   public:
@@ -60,12 +60,6 @@ namespace audio {
 
     constexpr static size_t mMaxNumChannels = 6;
     std::array <float*, mMaxNumChannels> mChannels = {};
-    };
-  //}}}
-  //{{{
-  struct sAudioDeviceIo {
-    cAudioBuffer inputBuffer;
-    cAudioBuffer outputBuffer;
     };
   //}}}
 
@@ -260,8 +254,8 @@ namespace audio {
     std::string getName() const noexcept { return mName; }
     std::wstring getDeviceId() const noexcept { return mDeviceId; }
 
-    bool isInput() const noexcept { return mIsRenderDevice == false; }
-    bool isOutput() const noexcept { return mIsRenderDevice == true; }
+    bool isInput() const noexcept { return !mIsRenderDevice; }
+    bool isOutput() const noexcept { return mIsRenderDevice; }
 
     int getNumInputChannels() const noexcept { return isInput() ? mMixFormat.Format.nChannels : 0; }
     int getNumOutputChannels() const noexcept { return isOutput() ? mMixFormat.Format.nChannels : 0; }
@@ -305,19 +299,64 @@ namespace audio {
     void wait() const { WaitForSingleObject (mEventHandle, INFINITE); }
 
     //{{{
-    void process (const std::function<void (cAudioDevice&, sAudioDeviceIo&)>& callback) {
+    void process (const std::function<void (cAudioDevice&, cAudioBuffer&)>& callback) {
 
-      if (!mixFormatMatchesType())
+      if (mMixFormat.SubFormat != KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)
         throw sAudioDeviceException ("Attempting to process a callback for a sample type that does not match the configured sample type.");
 
-      processHelper (callback);
+      if (mAudioClient == nullptr)
+        return;
+
+      if (isOutput()) {
+        UINT32 current_padding = 0;
+        mAudioClient->GetCurrentPadding (&current_padding);
+
+        auto numFramesAvailable = mBufferFrameCount - current_padding;
+        if (numFramesAvailable == 0)
+          return;
+
+        BYTE* data = nullptr;
+        mAudioRenderClient->GetBuffer (numFramesAvailable, &data);
+        if (data == nullptr)
+          return;
+
+        cAudioBuffer audioBuffer = { reinterpret_cast<float*>(data), numFramesAvailable, mMixFormat.Format.nChannels };
+        callback (*this, audioBuffer);
+
+        mAudioRenderClient->ReleaseBuffer (numFramesAvailable, 0);
+        }
+
+      else if (isInput()) {
+        UINT32 nextPacketSize = 0;
+        mAudioCaptureClient->GetNextPacketSize (&nextPacketSize);
+        if (nextPacketSize == 0)
+          return;
+
+        DWORD flags = 0;
+        BYTE* data = nullptr;
+        mAudioCaptureClient->GetBuffer (&data, &nextPacketSize, &flags, nullptr, nullptr);
+        if (data == nullptr)
+          return;
+
+        cAudioBuffer audioBuffer = { reinterpret_cast<float*>(data), nextPacketSize, mMixFormat.Format.nChannels };
+        callback (*this, audioBuffer);
+
+        mAudioCaptureClient->ReleaseBuffer (nextPacketSize);
+        }
       }
     //}}}
     //{{{
-    void connect (std::function<void (cAudioDevice&, sAudioDeviceIo&)> callback) {
+    void connect (std::function<void (cAudioDevice&, cAudioBuffer&)> callback) {
 
-      setSampleTypeHelper();
-      connectHelper (std::function<void (cAudioDevice&, sAudioDeviceIo&)> { callback } );
+      mMixFormat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+      mMixFormat.Format.wBitsPerSample = sizeof(float) * 8;
+      mMixFormat.Samples.wValidBitsPerSample = mMixFormat.Format.wBitsPerSample;
+      fixupMixFormat();
+
+      if (mRunning)
+        throw sAudioDeviceException ("Cannot connect to running audio_device.");
+
+      mUserCallback = move (callback);
       }
     //}}}
 
@@ -364,11 +403,7 @@ namespace audio {
           [this]() {
             SetThreadPriority (GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
             while (mRunning) {
-              visit ([this](auto&& callback) {
-                if (callback)
-                  process (callback);
-                }, mUserCallback);
-              wait();
+              visit ([this](auto&& callback) { if (callback) process (callback); }, mUserCallback); wait(); 
               }
             }
           };
@@ -491,82 +526,6 @@ namespace audio {
       }
     //}}}
 
-    //{{{
-    bool isConnected() const noexcept {
-      return visit([](auto&& callback) { return static_cast<bool>(callback); }, mUserCallback);
-      }
-    //}}}
-
-    bool mixFormatMatchesType() const noexcept { return mMixFormat.SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT; }
-    //{{{
-    void processHelper (const std::function<void (cAudioDevice&, sAudioDeviceIo&)>& callback) {
-
-      if (mAudioClient == nullptr)
-        return;
-
-      if (!mixFormatMatchesType())
-        return;
-
-      if (isOutput()) {
-        UINT32 current_padding = 0;
-        mAudioClient->GetCurrentPadding (&current_padding);
-
-        auto numFramesAvailable = mBufferFrameCount - current_padding;
-        if (numFramesAvailable == 0)
-          return;
-
-        BYTE* data = nullptr;
-        mAudioRenderClient->GetBuffer (numFramesAvailable, &data);
-        if (data == nullptr)
-          return;
-
-        sAudioDeviceIo deviceIo;
-        deviceIo.outputBuffer = { reinterpret_cast<float*>(data), numFramesAvailable, mMixFormat.Format.nChannels };
-        callback (*this, deviceIo);
-
-        mAudioRenderClient->ReleaseBuffer (numFramesAvailable, 0);
-        }
-
-      else if (isInput()) {
-        UINT32 nextPacketSize = 0;
-        mAudioCaptureClient->GetNextPacketSize (&nextPacketSize);
-        if (nextPacketSize == 0)
-          return;
-
-        DWORD flags = 0;
-        BYTE* data = nullptr;
-        mAudioCaptureClient->GetBuffer (&data, &nextPacketSize, &flags, nullptr, nullptr);
-        if (data == nullptr)
-          return;
-
-        sAudioDeviceIo deviceIo;
-        deviceIo.inputBuffer = { reinterpret_cast<float*>(data), nextPacketSize, mMixFormat.Format.nChannels };
-        callback (*this, deviceIo);
-
-        mAudioCaptureClient->ReleaseBuffer (nextPacketSize);
-        }
-      }
-    //}}}
-    //{{{
-    bool setSampleTypeHelper() {
-      mMixFormat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-      mMixFormat.Format.wBitsPerSample = sizeof(float) * 8;
-      mMixFormat.Samples.wValidBitsPerSample = mMixFormat.Format.wBitsPerSample;
-      fixupMixFormat();
-
-      return true;
-      }
-    //}}}
-    //{{{
-    void connectHelper (std::function<void (cAudioDevice&, sAudioDeviceIo&)> callback) {
-
-      if (mRunning)
-        throw sAudioDeviceException ("Cannot connect to running audio_device.");
-
-      mUserCallback = move (callback);
-      }
-    //}}}
-
     IMMDevice* mDevice = nullptr;
     IAudioClient* mAudioClient = nullptr;
     IAudioCaptureClient* mAudioCaptureClient = nullptr;
@@ -584,7 +543,7 @@ namespace audio {
     std::thread mProcessingThread;
 
     std::function <void (cAudioDevice&)> mStopCallback;
-    std::variant <std::function<void (cAudioDevice&, sAudioDeviceIo&)>> mUserCallback;
+    std::variant <std::function<void (cAudioDevice&, cAudioBuffer&)>> mUserCallback;
 
     cWaspiUtil::cComInitializer mComInitializer;
     };

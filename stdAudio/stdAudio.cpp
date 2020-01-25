@@ -162,14 +162,12 @@ int main() {
   float phase = 0;
   //}}}
 
-  device->connect ([=] (cAudioDevice& device, sAudioDeviceIo& io) mutable noexcept {
-    auto& out = io.outputBuffer;
-    // melody
-    for (int frame = 0; frame < out.getSizeFrames(); ++frame) {
-      auto next_sample = synth.getNextSample();
-      for (int channel = 0; channel < out.getSizeChannels(); ++channel)
-        out (frame, channel) = next_sample;
-      cLog::log (LOGINFO, " connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), out.getSizeFrames());
+  device->connect ([=] (cAudioDevice& device, cAudioBuffer& buffer) mutable noexcept {
+    for (int frame = 0; frame < buffer.getSizeFrames(); ++frame) {
+      auto nextSample = synth.getNextSample();
+      for (int channel = 0; channel < buffer.getSizeChannels(); ++channel)
+        buffer (frame, channel) = nextSample;
+      //cLog::log (LOGINFO, " connect %d %d %d", device.getSampleRate(), device.getBufferSizeFrames(), out.getSizeFrames());
       }
     //{{{  sine
     //for (int frame = 0; frame < out.size_frames(); ++frame) {
