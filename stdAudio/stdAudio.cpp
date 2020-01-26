@@ -186,7 +186,7 @@ int main() {
 
   device->start ([=](cAudioDevice& device) { cLog::log (LOGINFO, "startCallback"); },
                  [=](cAudioDevice& device) { cLog::log (LOGINFO, "stopCallback");  } );
-  while (!stop.load()) {
+
+  while (!stop.load()) 
     this_thread::sleep_for (chrono::milliseconds (50));
-    }
   }
