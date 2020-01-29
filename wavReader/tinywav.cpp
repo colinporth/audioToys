@@ -21,13 +21,12 @@ int cTinyWav::openRead (const char* filePath, eSampleFormat sampleFormat, eChann
 
   auto ret = fread (&mHeader, sizeof (tWavHeader), 1, mFile);
   assert (ret > 0);
-  assert (mHeader.ChunkID == htonl (0x52494646));        // "RIFF"
-  assert (mHeader.Format == htonl (0x57415645));         // "WAVE"
-  assert (mHeader.Subchunk1ID == htonl (0x666d7420));    // "fmt "
+  assert (mHeader.ChunkID == htonl (0x52494646));     // "RIFF"
+  assert (mHeader.Format == htonl (0x57415645));      // "WAVE"
+  assert (mHeader.Subchunk1ID == htonl (0x666d7420)); // "fmt "
 
   // skip over any other chunks before the "data" chunk
   while (mHeader.Subchunk2ID != htonl (0x64617461)) {
-    // not data chunk
     fseek (mFile, 4, SEEK_CUR);
     fread (&mHeader.Subchunk2ID, 4, 1, mFile);
     }
@@ -151,11 +150,11 @@ int cTinyWav::openWrite (const char* path, int16_t numChannels, int32_t samplera
 
   // prepare WAV header
   tWavHeader mHeader;
-  mHeader.ChunkID = htonl(0x52494646); // "RIFF"
+  mHeader.ChunkID = htonl (0x52494646); // "RIFF"
   mHeader.ChunkSize = 0; // fill this in on file-close
-  mHeader.Format = htonl(0x57415645); // "WAVE"
+  mHeader.Format = htonl (0x57415645); // "WAVE"
 
-  mHeader.Subchunk1ID = htonl(0x666d7420); // "fmt "
+  mHeader.Subchunk1ID = htonl (0x666d7420); // "fmt "
   mHeader.Subchunk1Size = 16; // PCM
 
   mHeader.AudioFormat = (sampleFormat-1); // 1 PCM, 3 IEEE float

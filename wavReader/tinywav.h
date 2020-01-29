@@ -30,24 +30,24 @@ public:
 
 private:
   //{{{
-  typedef struct tWavHeader {
-    uint32_t ChunkID;
-    uint32_t ChunkSize;
-    uint32_t Format;
+  struct tWavHeader {
+    uint32_t ChunkID;        // 0
+    uint32_t ChunkSize;      // 4
+    uint32_t Format;         // 8
 
-    uint32_t Subchunk1ID;
-    uint32_t Subchunk1Size;
+    uint32_t Subchunk1ID;    // 12
+    uint32_t Subchunk1Size;  // 16
 
-    uint16_t AudioFormat;
-    uint16_t NumChannels;
-    uint32_t SampleRate;
-    uint32_t ByteRate;
-    uint16_t BlockAlign;
-    uint16_t BitsPerSample;
+    uint16_t AudioFormat;    // 20
+    uint16_t NumChannels;    // 22
+    uint32_t SampleRate;     // 24
+    uint32_t ByteRate;       // 28
+    uint16_t BlockAlign;     // 32
+    uint16_t BitsPerSample;  // 34
 
-    uint32_t Subchunk2ID;
-    uint32_t Subchunk2Size;
-    } tWavHeader;
+    uint32_t Subchunk2ID;    // 36
+    uint32_t Subchunk2Size;  // 40
+    };                       // 44
   //}}}
 
   //{{{
