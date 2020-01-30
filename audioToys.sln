@@ -21,6 +21,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SoundTouch", "soundtouch\so
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "soundstretch", "soundtouch\source\SoundStretch\soundstretch.vcxproj", "{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rubberband-library", "rubberband\rubberband-library.vcxproj", "{020CEB11-EF4E-400E-971D-A35DB69D7CF9}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rubberband-program", "rubberband\rubberband-program.vcxproj", "{06838307-FEAA-4DB0-8E08-AF19698E9C40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		AVX_Release|x64 = AVX_Release|x64
@@ -175,6 +179,38 @@ Global
 		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x64.Build.0 = Release|x64
 		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x86.ActiveCfg = Release|Win32
 		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x86.Build.0 = Release|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.AVX_Release|x64.ActiveCfg = Release|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.AVX_Release|x64.Build.0 = Release|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.AVX_Release|x86.ActiveCfg = Release|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.AVX_Release|x86.Build.0 = Release|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Debug|x64.ActiveCfg = Debug|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Debug|x64.Build.0 = Debug|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Debug|x86.ActiveCfg = Debug|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Debug|x86.Build.0 = Debug|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release(NoSSE)|x64.ActiveCfg = Release|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release(NoSSE)|x64.Build.0 = Release|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release(NoSSE)|x86.ActiveCfg = Release|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release(NoSSE)|x86.Build.0 = Release|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release|x64.ActiveCfg = Release|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release|x64.Build.0 = Release|x64
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release|x86.ActiveCfg = Release|Win32
+		{020CEB11-EF4E-400E-971D-A35DB69D7CF9}.Release|x86.Build.0 = Release|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.AVX_Release|x64.ActiveCfg = Release|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.AVX_Release|x64.Build.0 = Release|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.AVX_Release|x86.ActiveCfg = Release|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.AVX_Release|x86.Build.0 = Release|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Debug|x64.ActiveCfg = Debug|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Debug|x64.Build.0 = Debug|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Debug|x86.ActiveCfg = Debug|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Debug|x86.Build.0 = Debug|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release(NoSSE)|x64.ActiveCfg = Release|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release(NoSSE)|x64.Build.0 = Release|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release(NoSSE)|x86.ActiveCfg = Release|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release(NoSSE)|x86.Build.0 = Release|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release|x64.ActiveCfg = Release|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release|x64.Build.0 = Release|x64
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release|x86.ActiveCfg = Release|Win32
+		{06838307-FEAA-4DB0-8E08-AF19698E9C40}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,8 +1,9 @@
+//{{{
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// Generic version of the x86 CPU extension detection routine.
 ///
-/// This file is for GNU & other non-Windows compilers, see 'cpu_detect_x86_win.cpp' 
+/// This file is for GNU & other non-Windows compilers, see 'cpu_detect_x86_win.cpp'
 /// for the Microsoft compiler version.
 ///
 /// Author        : Copyright (c) Olli Parviainen
@@ -31,42 +32,34 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
 ////////////////////////////////////////////////////////////////////////////////
-
+//}}}
 #include "cpu_detect.h"
 #include "STTypes.h"
 
-
 #if defined(SOUNDTOUCH_ALLOW_X86_OPTIMIZATIONS)
+  #if defined(__GNUC__) && defined(__i386__)
+    // gcc
+    #include "cpuid.h"
+  #elif defined(_M_IX86)
+    // windows non-gcc
+    #include <intrin.h>
+  #endif
 
-   #if defined(__GNUC__) && defined(__i386__)
-       // gcc
-       #include "cpuid.h"
-   #elif defined(_M_IX86)
-       // windows non-gcc
-       #include <intrin.h>
-   #endif
-
-   #define bit_MMX     (1 << 23)
-   #define bit_SSE     (1 << 25)
-   #define bit_SSE2    (1 << 26)
+  #define bit_MMX     (1 << 23)
+  #define bit_SSE     (1 << 25)
+  #define bit_SSE2    (1 << 26)
 #endif
-
-
-//////////////////////////////////////////////////////////////////////////////
-//
-// processor instructions extension detection routines
-//
-//////////////////////////////////////////////////////////////////////////////
 
 // Flag variable indicating whick ISA extensions are disabled (for debugging)
 static uint _dwDisabledISA = 0x00;      // 0xffffffff; //<- use this to disable all extensions
 
+//{{{
 // Disables given set of instruction extensions. See SUPPORT_... defines.
 void disableExtensions(uint dwDisableMask)
 {
     _dwDisabledISA = dwDisableMask;
 }
-
+//}}}
 
 /// Checks which instruction set extensions are supported by the CPU.
 uint detectCPUextensions(void)
@@ -85,10 +78,11 @@ uint detectCPUextensions(void)
     || defined(_M_IX86))  \
     && defined(SOUNDTOUCH_ALLOW_X86_OPTIMIZATIONS)
 
-    if (_dwDisabledISA == 0xffffffff) return 0;
- 
+    if (_dwDisabledISA == 0xffffffff) 
+      return 0;
+
     uint res = 0;
- 
+
 #if defined(__GNUC__)
     // GCC version of cpuid. Requires GCC 4.3.0 or later for __cpuid intrinsic support.
     uint eax, ebx, ecx, edx;  // unsigned int is the standard type. uint is defined by the compiler and not guaranteed to be portable.
@@ -101,7 +95,7 @@ uint detectCPUextensions(void)
     if (edx & bit_SSE2) res = res | SUPPORT_SSE2;
 
 #else
-    // Window / VS version of cpuid. Notice that Visual Studio 2005 or later required 
+    // Window / VS version of cpuid. Notice that Visual Studio 2005 or later required
     // for __cpuid intrinsic support.
     int reg[4] = {-1};
 

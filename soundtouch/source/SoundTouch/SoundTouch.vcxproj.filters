@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="AAFilter.cpp" />
+    <ClCompile Include="BPMDetect.cpp" />
+    <ClCompile Include="cpu_detect_x86.cpp" />
+    <ClCompile Include="FIFOSampleBuffer.cpp" />
+    <ClCompile Include="FIRFilter.cpp" />
+    <ClCompile Include="InterpolateCubic.cpp" />
+    <ClCompile Include="InterpolateLinear.cpp" />
+    <ClCompile Include="InterpolateShannon.cpp" />
+    <ClCompile Include="mmx_optimized.cpp" />
+    <ClCompile Include="PeakFinder.cpp" />
+    <ClCompile Include="RateTransposer.cpp" />
+    <ClCompile Include="SoundTouch.cpp" />
+    <ClCompile Include="sse_optimized.cpp" />
+    <ClCompile Include="TDStretch.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AAFilter.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\BPMDetect.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="cpu_detect.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\FIFOSamplePipe.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\FIFOSampleBuffer.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="FIRFilter.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="InterpolateCubic.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="InterpolateLinear.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="InterpolateShannon.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="PeakFinder.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="RateTransposer.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\SoundTouch.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="TDStretch.h">
+      <Filter>h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\STTypes.h">
+      <Filter>h</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="h">
+      <UniqueIdentifier>{b4726d08-6b05-4599-b609-c1caa1238a07}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
