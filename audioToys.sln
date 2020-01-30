@@ -17,6 +17,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LC3plus", "LC3plus\msvc\LC3
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wavReader", "wavReader\wavReader.vcxproj", "{3070E74B-42D8-4F4F-A992-49A19E90EF56}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SoundTouch", "soundtouch\source\SoundTouch\SoundTouch.vcxproj", "{68A5DD20-7057-448B-8FE0-B6AC8D205509}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "soundstretch", "soundtouch\source\SoundStretch\soundstretch.vcxproj", "{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		AVX_Release|x64 = AVX_Release|x64
@@ -139,6 +143,38 @@ Global
 		{3070E74B-42D8-4F4F-A992-49A19E90EF56}.Release|x64.Build.0 = Release|x64
 		{3070E74B-42D8-4F4F-A992-49A19E90EF56}.Release|x86.ActiveCfg = Release|Win32
 		{3070E74B-42D8-4F4F-A992-49A19E90EF56}.Release|x86.Build.0 = Release|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.AVX_Release|x64.ActiveCfg = Release|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.AVX_Release|x64.Build.0 = Release|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.AVX_Release|x86.ActiveCfg = Release|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.AVX_Release|x86.Build.0 = Release|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Debug|x64.ActiveCfg = Debug|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Debug|x64.Build.0 = Debug|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Debug|x86.ActiveCfg = Debug|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Debug|x86.Build.0 = Debug|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release(NoSSE)|x64.ActiveCfg = Release|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release(NoSSE)|x64.Build.0 = Release|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release(NoSSE)|x86.ActiveCfg = Release|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release(NoSSE)|x86.Build.0 = Release|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release|x64.ActiveCfg = Release|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release|x64.Build.0 = Release|x64
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release|x86.ActiveCfg = Release|Win32
+		{68A5DD20-7057-448B-8FE0-B6AC8D205509}.Release|x86.Build.0 = Release|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.AVX_Release|x64.ActiveCfg = Release|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.AVX_Release|x64.Build.0 = Release|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.AVX_Release|x86.ActiveCfg = Release|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.AVX_Release|x86.Build.0 = Release|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Debug|x64.ActiveCfg = Debug|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Debug|x64.Build.0 = Debug|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Debug|x86.ActiveCfg = Debug|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Debug|x86.Build.0 = Debug|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release(NoSSE)|x64.ActiveCfg = Release|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release(NoSSE)|x64.Build.0 = Release|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release(NoSSE)|x86.ActiveCfg = Release|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release(NoSSE)|x86.Build.0 = Release|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x64.ActiveCfg = Release|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x64.Build.0 = Release|x64
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x86.ActiveCfg = Release|Win32
+		{5AACDFFA-D491-44B8-A332-DA7ACCAAF2AF}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
