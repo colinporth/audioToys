@@ -34,9 +34,22 @@ int main() {
 
   cWinHttp http;
   //if (http.get ("stream.wqxr.org", "js-stream.aac")) {
-  auto host = http.getRedirectable ("nothings.org", "");
+  std::string host = "as-hls-uk-live.bbcfmt.hs.llnwd.net";
+  std::string path = "pool_904/live/uk/bbc_radio_fourfm/bbc_radio_fourfm.isml/bbc_radio_fourfm-audio%3d128000.norewind.m3u8";
 
-  if (!host.empty()) {
+  //auto host = http.getRedirectable ("nothings.org", "");
+  auto rhost = http.getRedirectable (host, path);
+  if (rhost != host)
+    cLog::log(LOGINFO, "Redirect %d %s %s", http.getResponseCode(), rhost.c_str(), host.c_str());
+
+  if (!rhost.empty()) {
+    cLog::log (LOGINFO, "Response: %d", http.getResponseCode());
+    if (http.getBodySize())
+      cLog::log (LOGINFO, "%s", http.getBody());
+    }
+
+  auto ok = http.get (rhost, path);
+  if (ok) {
     cLog::log (LOGINFO, "Response: %d", http.getResponseCode());
     if (http.getBodySize())
       cLog::log (LOGINFO, "%s", http.getBody());

@@ -28,6 +28,9 @@ public:
   //{{{
   bool get (const std::string& host, const std::string& path) {
 
+    clear();
+    mBody.clear();
+
     mSocket = connectSocket (host, 80);
     if (mSocket < 0) {
       cLog::log (LOGERROR, "failed to connect socket" + host);
@@ -73,7 +76,8 @@ public:
        }
        //}}}
 
-     closesocket (mSocket);
+     //closesocket (mSocket);
+     //mSocket = -1;
      return true;
      }
   //}}}

@@ -191,6 +191,22 @@ protected:
   virtual void gotBody (const char* data, int size) = 0;
   virtual void gotHeader (const char* ckey, int nkey, const char* cvalue, int nvalue) = 0;
   virtual void gotCode (int code) = 0;
+  //{{{
+  void clear() {
+
+    mState = eStateHeader;
+    mCode = 0;
+    mParseState = 0;
+    mContentLength = -1;
+    mNumKey = 0;
+    mNumValue = 0;
+    mChunked = false;
+
+    free (mScratch);
+    mScratch = nullptr;
+    mScratchSize = 0;
+    }
+  //}}}
 
   //{{{
   class cUrl {
