@@ -2,10 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="..\..\shared\utils\cLog.cpp" />
-    <ClCompile Include="chunk.c" />
-    <ClCompile Include="example.cpp" />
-    <ClCompile Include="header.c" />
-    <ClCompile Include="http.c" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\shared\utils\cLog.h">
@@ -14,13 +11,7 @@
     <ClInclude Include="..\..\shared\utils\utils.h">
       <Filter>h</Filter>
     </ClInclude>
-    <ClInclude Include="chunk.h">
-      <Filter>h</Filter>
-    </ClInclude>
-    <ClInclude Include="header.h">
-      <Filter>h</Filter>
-    </ClInclude>
-    <ClInclude Include="http.h">
+    <ClInclude Include="tinyHttp.h">
       <Filter>h</Filter>
     </ClInclude>
   </ItemGroup>

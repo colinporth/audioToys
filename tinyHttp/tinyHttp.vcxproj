@@ -20,17 +20,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\shared\utils\cLog.cpp" />
-    <ClCompile Include="chunk.c" />
-    <ClCompile Include="example.cpp" />
-    <ClCompile Include="header.c" />
-    <ClCompile Include="http.c" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\shared\utils\cLog.h" />
     <ClInclude Include="..\..\shared\utils\utils.h" />
-    <ClInclude Include="chunk.h" />
-    <ClInclude Include="header.h" />
-    <ClInclude Include="http.h" />
+    <ClInclude Include="tinyHttp.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3593A954-2FB3-4321-A208-629A2C2A3AEC}</ProjectGuid>
@@ -90,6 +85,7 @@
       <TreatWarningAsError>false</TreatWarningAsError>
       <PreprocessorDefinitions>UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\d2dwin\inc\ffmpeg;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -105,6 +101,7 @@
       <TreatWarningAsError>false</TreatWarningAsError>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\ffmpeg\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -122,6 +119,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\d2dwin\inc\ffmpeg;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -140,6 +138,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\ffmpeg\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

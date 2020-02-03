@@ -1,3 +1,4 @@
+// minimal winSock http get parser, based on tinyHttp
 //{{{
 /*-
  * Copyright 2012 Matthew Endsley
@@ -24,23 +25,14 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-
-/*
-Compiling example:
-$ g++ -o example example.cpp
-*/
 //}}}
 //{{{  includes
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include <windows.h>
 
+#include <windows.h>
 #include <winsock2.h>
 #include <WS2tcpip.h>
-//#include <sys/socket.h>
-//#include <netdb.h>
-//#include <unistd.h>
 
 #include <string>
 #include <vector>
@@ -50,16 +42,16 @@ $ g++ -o example example.cpp
 #include <stdlib.h>
 #include <sys/types.h>
 
-#include "http.h"
-#include "header.h"
-#include "chunk.h"
+#include "tinyHttp.h"
+
+#include "../../shared/utils/cLog.h"
 
 using namespace std;
 //}}}
 
 //{{{
 // return a socket connected to a hostname, or -1
-int connectsocket (const char* host, int port) {
+int connectSocket (const char* host, int port) {
 // return a socket connected to a hostname, or -1
 
 	// win32 find host ipAddress
@@ -105,98 +97,102 @@ struct HttpResponse {
 	int code;
 	};
 //}}}
-
 //{{{
-static void* response_realloc (void* opaque, void* ptr, int size) {
+void* responseRealloc (void* opaque, void* ptr, int size) {
 	return realloc (ptr, size);
 	}
 //}}}
 //{{{
-static void response_body (void* opaque, const char* data, int size) {
+void responseBody (void* opaque, const char* data, int size) {
 	HttpResponse* response = (HttpResponse*)opaque;
 	response->body.insert(response->body.end(), data, data + size);
 	}
 //}}}
 //{{{
-static void response_header (void* opaque, const char* ckey, int nkey, const char* cvalue, int nvalue) {
+void responseHeader (void* opaque, const char* ckey, int nkey, const char* cvalue, int nvalue) {
 	}
 //}}}
 //{{{
-static void response_code (void* opaque, int code) {
+void responseCode (void* opaque, int code) {
 	HttpResponse* response = (HttpResponse*)opaque;
 	response->code = code;
 	}
 //}}}
 
-static const http_funcs responseFuncs = {
-	response_realloc,
-	response_body,
-	response_header,
-	response_code,
-	};
-
 //{{{
+const cTinyHttp::http_funcs responseFuncs = {
+	responseRealloc,
+	responseBody,
+	responseHeader,
+	responseCode,
+	};
+//}}}
+
 int main() {
+
+	cLog::init (LOGINFO, false, "",  "tinyHttp");
 
 	WSADATA wsaData;
 	if (WSAStartup (MAKEWORD(2,2), &wsaData))
 		exit (0);
 
-	int conn = connectsocket("nothings.org", 80);
-		if (conn < 0) {
-			fprintf(stderr, "Failed to connect socket\n");
-			return -1;
-			}
+	string hostStr = "nothings.org"; string pathStr = "";
+	//string hostStr = "stream.wqxr.org"; string pathStr = "js-stream.aac";
 
-	const char request[] = "GET / HTTP/1.0\r\nContent-Length: 0\r\n\r\n";
-	int len = send (conn, request, sizeof(request) - 1, 0);
-	if (len != sizeof(request) - 1) {
-		fprintf (stderr, "Failed to send request\n");
-		closesocket (conn);
+	int socket = connectSocket (hostStr.c_str(), 80);
+	if (socket < 0) {
+		//{{{  error
+		cLog::log (LOGERROR, "Failed to connect socket");
 		return -1;
 		}
+		//}}}
+
+	string requestStr = "GET /" + pathStr + " HTTP/1.1\r\nHost: " + hostStr + "\r\n\r\n";
+	if (send (socket, requestStr.c_str(), (int)requestStr.size(), 0) != (int)requestStr.size()) {
+		//{{{  error
+		cLog::log (LOGERROR, "request send failed");
+		closesocket (socket);
+		return -1;
+		}
+		//}}}
 
 	HttpResponse response;
 	response.code = 0;
+	cTinyHttp http (responseFuncs, &response);
 
-	http_roundtripper rt;
-	http_init (&rt, responseFuncs, &response);
+	bool ok = true;
+	while (ok) {
+		char buffer[1024];
+		int bytesReceived = recv (socket, buffer, sizeof(buffer), 0);
+		if (bytesReceived <= 0) {
+			cLog::log (LOGERROR, "Error receiving data");
+			closesocket (socket);
+			return -1;
+			}
 
-	bool needmore = true;
-	char buffer[1024];
-	while (needmore) {
 		const char* data = buffer;
-		int ndata = recv (conn, buffer, sizeof(buffer), 0);
-		if (ndata <= 0) {
-			fprintf(stderr, "Error receiving data\n");
-			http_free(&rt);
-			closesocket(conn);
-			return -1;
-			}
-
-		while (needmore && ndata) {
-			int read;
-			needmore = http_data (&rt, data, ndata, &read);
-			ndata -= read;
-			data += read;
+		while (ok && bytesReceived) {
+			int bytesParsed;
+			ok = http.parseData (data, bytesReceived, &bytesParsed);
+			cLog::log (LOGINFO, "%d %d %d", ok, bytesReceived, bytesParsed);
+			bytesReceived -= bytesParsed;
+			data += bytesParsed;
 			}
 		}
 
-	if (http_iserror (&rt)) {
-			fprintf (stderr, "Error parsing data\n");
-			http_free (&rt);
-			closesocket (conn);
-			return -1;
-	}
-
-	http_free(&rt);
-	closesocket (conn);
-
-	printf ("Response: %d\n", response.code);
-	if (!response.body.empty()) {
-		printf("%s\n", &response.body[0]);
+	if (http.iserror()) {
+		//{{{  error
+		cLog::log (LOGERROR, "Error parsing data");
+		closesocket (socket);
+		return -1;
 		}
+		//}}}
+
+	closesocket (socket);
+
+	cLog::log (LOGINFO, "Response: %d", response.code);
+	if (!response.body.empty())
+		cLog::log (LOGINFO, "%s", &response.body[0]);
 
 	return 0;
 	}
-//}}}
